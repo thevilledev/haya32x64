@@ -21,5 +21,8 @@ fi
 	-Wl,--strip-all \
 	-o wasm/haya32x64.wasm wasm/shim.c
 
+# Linkers create executable outputs even though a wasm module is package data.
+chmod 0644 wasm/haya32x64.wasm
+
 node scripts/embed.mjs
 wc -c wasm/haya32x64.wasm

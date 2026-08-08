@@ -161,6 +161,8 @@ jobs:
       - name: Compile and generate KAT
         shell: cmd
         run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           cl /nologo /std:c11 /O2 /W4 /WX tests\kat.c /Fe:kat.exe
           kat.exe > kat-msvc.txt
       - name: Compare KAT
