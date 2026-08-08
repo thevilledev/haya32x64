@@ -216,7 +216,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Compile and generate KAT
-        shell: cmd
+        shell: cmd # zizmor: ignore[misfeature] -- required for VsDevCmd.bat
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
