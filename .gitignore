@@ -1,0 +1,9 @@
+tests/kat
+tests/verify
+tests/quality
+tests/kat.actual.txt
+tests/differential/generate
+tests/smhasher3/smhasher3/
+*.dSYM/
+*.bin
+*.tgz

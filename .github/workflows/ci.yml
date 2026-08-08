@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  c:
+    name: C (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: >-
+          make -C tests
+          CC=${{ matrix.compiler }}
+          CFLAGS="-O2 -std=c11 -Wall -Wextra -Werror"
+          test
+
+  sanitize:
+    name: C (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run under sanitizers
+        run: >-
+          make -C tests
+          CC=clang
+          CFLAGS="-O1 -g -std=c11 -Wall -Wextra -Werror
+          -fsanitize=address,undefined
+          -fno-omit-frame-pointer
+          -fno-sanitize-recover=all"
+          test
+
+  javascript:
+    name: JavaScript (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 22, 24]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - name: Install package metadata
+        run: npm ci
+        working-directory: js
+      - name: Test both engines
+        run: npm test
+        working-directory: js
+      - name: Check publish contents
+        if: matrix.node == 22
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+        run: npm pack --dry-run
+        working-directory: js
+
+  differential:
+    name: C reference vs JavaScript engines
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Generate C-reference corpus
+        run: |
+          cc -O2 -std=c11 -Wall -Wextra -Werror \
+            tests/differential/generate.c \
+            -o tests/differential/generate
+          tests/differential/generate \
+            "${{ runner.temp }}/haya32x64.bin" \
+            0x0123456789abcdef 4096
+      - name: Replay both JavaScript engines
+        env:
+          HAYA32X64_CORPUS: ${{ runner.temp }}/haya32x64.bin
+        run: node --test js/test/differential.test.mjs
+
+  wasm-reproducible:
+    name: WebAssembly artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Rebuild committed wasm and embedded bytes
+        run: npm run build:wasm
+        working-directory: js
+      - name: Check generated artifacts are reproducible
+        run: git diff --exit-code -- js/wasm/haya32x64.wasm js/wasm-module.js
+
+  big-endian:
+    name: C (s390x big endian)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - name: Install qemu-user
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - name: Cross-compile and compare KAT
+        run: |
+          zig cc -target s390x-linux-musl \
+            -O2 -std=c11 -Wall -Wextra -Werror \
+            tests/kat.c -o "${{ runner.temp }}/kat-s390x"
+          qemu-s390x "${{ runner.temp }}/kat-s390x" > "${{ runner.temp }}/kat.txt"
+          diff -u tests/kat.txt "${{ runner.temp }}/kat.txt"
+
+  msvc:
+    name: C (MSVC x64)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compile and generate KAT
+        shell: cmd
+        run: |
+          cl /nologo /std:c11 /O2 /W4 /WX tests\kat.c /Fe:kat.exe
+          kat.exe > kat-msvc.txt
+      - name: Compare KAT
+        shell: pwsh
+        run: |
+          $expected = (Get-Content tests/kat.txt) -join "`n"
+          $actual = (Get-Content kat-msvc.txt) -join "`n"
+          if ($expected -ne $actual) {
+            Compare-Object (Get-Content tests/kat.txt) (Get-Content kat-msvc.txt)
+            exit 1
+          }

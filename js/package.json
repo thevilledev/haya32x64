@@ -1,0 +1,48 @@
+{
+	"name": "haya32x64",
+	"version": "0.1.0",
+	"description": "A high-quality 64-bit hash built entirely from 32-bit operations",
+	"type": "module",
+	"license": "Unlicense",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/thevilledev/haya32x64.git"
+	},
+	"keywords": [
+		"hash",
+		"hashing",
+		"64-bit",
+		"javascript",
+		"wasm"
+	],
+	"engines": {
+		"node": ">=18"
+	},
+	"exports": {
+		".": {
+			"types": "./index.d.ts",
+			"import": "./index.js"
+		},
+		"./pure": {
+			"types": "./pure.d.ts",
+			"import": "./pure.js"
+		},
+		"./haya32x64.wasm": "./wasm/haya32x64.wasm"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"pure.js",
+		"pure.d.ts",
+		"wasm.js",
+		"wasm-module.js",
+		"wasm/haya32x64.wasm",
+		"LICENSE",
+		"README.md"
+	],
+	"scripts": {
+		"build:wasm": "sh wasm/build.sh",
+		"test": "node --test",
+		"test:package": "npm pack --dry-run"
+	}
+}
