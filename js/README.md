@@ -5,6 +5,17 @@ strictly 32-bit. The package uses `Math.imul` plus exact limb arithmetic in
 pure JavaScript and the reference C header compiled to WebAssembly for larger
 inputs. It never requires `BigInt`.
 
+## Choosing between the Haya hashes
+
+Use [`hayahash`](https://www.npmjs.com/package/hayahash) when efficient native
+64-bit arithmetic is available; use `haya32x64` when the implementation must
+stay within 32-bit operations. Both return 64-bit digests, but they are
+different algorithms and do not produce interchangeable hashes. Their separate
+repositories keep each digest definition, test vectors, versioning, and
+compatibility lifecycle independent. See the
+[`haya32x64` project README](https://github.com/thevilledev/haya32x64#relationship-to-hayahash)
+for the detailed comparison.
+
 ```js
 import { haya32x64, haya32x64Hex } from "haya32x64";
 

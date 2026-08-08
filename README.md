@@ -13,6 +13,25 @@ Cortex-M, RV32, and shader languages such as GLSL. On ordinary 64-bit hosts,
 use a hash designed for that hardware instead—this project exists for the
 next portability boundary down.
 
+## Relationship to hayahash
+
+Both projects produce 64-bit non-cryptographic digests, but they define
+different hash functions:
+
+- [`hayahash`](https://github.com/thevilledev/hayahash) uses native 64-bit
+  state and ordinary 64×64-to-64-bit multiplication. Choose it when efficient
+  `uint64_t`/`i64` arithmetic is available. Its JavaScript package is
+  [`hayahash` on npm](https://www.npmjs.com/package/hayahash).
+- `haya32x64` keeps its state and arithmetic 32-bit while retaining both halves
+  of each 32×32 product. Choose it for 32-bit processors, pure JavaScript
+  without `BigInt`, CSP-constrained runtimes, and similar targets.
+
+They live in separate repositories because neither is an implementation
+backend for the other: the same input and seed produce different digests.
+Each algorithm therefore has its own reference header, known-answer vectors,
+verification value, compatibility promise, versioning, and release lifecycle.
+Switching between them is a persisted-data migration, not a performance toggle.
+
 The algorithm definition is the single public-domain C header
 [`haya32x64.h`](haya32x64.h). The [`js/`](js/) package contains two bit-exact
 engines: a pure-JavaScript implementation based on `Math.imul` and exact
