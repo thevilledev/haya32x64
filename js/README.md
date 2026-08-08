@@ -20,3 +20,19 @@ haya32x64(bytes, 0xcafebabe, 0xdeadbeef);
 
 Use `haya32x64Pure` to force the no-wasm implementation. In runtimes that
 precompile `.wasm` imports, pass the shipped module to `setWasmModule`.
+
+Unknown-length streaming produces the same digest as concatenating the input
+and hashing it in one shot. `digest()` is non-destructive, so the stream can be
+extended afterward.
+
+```js
+import { createHaya32x64 } from "haya32x64";
+
+const stream = createHaya32x64(0xcafebabe, 0xdeadbeef);
+stream.update(part1).update(part2);
+const words = stream.digest();
+```
+
+The streaming engine is pure JavaScript and retains at most 192 input bytes.
+Each string passed to `update()` is UTF-8 encoded independently; use byte
+chunks when splitting arbitrary string positions (such as a surrogate pair).

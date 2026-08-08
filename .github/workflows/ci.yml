@@ -142,13 +142,17 @@ jobs:
           version: 0.16.0
       - name: Install qemu-user
         run: sudo apt-get update && sudo apt-get install -y qemu-user
-      - name: Cross-compile and compare KAT
+      - name: Cross-compile KAT and streaming tests
         run: |
           zig cc -target s390x-linux-musl \
             -O2 -std=c11 -Wall -Wextra -Werror \
             tests/kat.c -o "${{ runner.temp }}/kat-s390x"
           qemu-s390x "${{ runner.temp }}/kat-s390x" > "${{ runner.temp }}/kat.txt"
           diff -u tests/kat.txt "${{ runner.temp }}/kat.txt"
+          zig cc -target s390x-linux-musl \
+            -O2 -std=c11 -Wall -Wextra -Werror \
+            tests/streaming.c -o "${{ runner.temp }}/streaming-s390x"
+          qemu-s390x "${{ runner.temp }}/streaming-s390x"
 
   msvc:
     name: C (MSVC x64)
@@ -165,6 +169,8 @@ jobs:
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           cl /nologo /std:c11 /O2 /W4 /WX tests\kat.c /Fe:kat.exe
           kat.exe > kat-msvc.txt
+          cl /nologo /std:c11 /O2 /W4 /WX tests\streaming.c /Fe:streaming.exe
+          streaming.exe
       - name: Compare KAT
         shell: pwsh
         run: |

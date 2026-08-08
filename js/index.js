@@ -2,7 +2,7 @@
 // boundary; larger keys use the reference C header compiled to wasm when the
 // runtime permits it.  Both engines are bit-exact and neither uses BigInt.
 
-import { hashPure } from "./pure.js";
+import { hashPure, Haya32x64PureStream } from "./pure.js";
 import { initWasm, initWasmFromModule } from "./wasm.js";
 
 const WASM_MIN_LENGTH = 16;
@@ -67,6 +67,34 @@ export function haya32x64Pure(input, seedLo = 0, seedHi = 0) {
 		normalizeWord(seedLo, "seedLo"),
 		normalizeWord(seedHi, "seedHi"),
 	);
+}
+
+/** Unknown-length stream whose digest is identical to the one-shot API. */
+export class Haya32x64Stream {
+	constructor(seedLo = 0, seedHi = 0) {
+		this.state = new Haya32x64PureStream(
+			normalizeWord(seedLo, "seedLo"),
+			normalizeWord(seedHi, "seedHi"),
+		);
+	}
+
+	update(input) {
+		this.state.update(normalizeInput(input));
+		return this;
+	}
+
+	digest() {
+		return this.state.digest();
+	}
+
+	digestHex() {
+		return digestHex(this.digest());
+	}
+}
+
+/** Creates an unknown-length, one-shot-identical streaming hash state. */
+export function createHaya32x64(seedLo = 0, seedHi = 0) {
+	return new Haya32x64Stream(seedLo, seedHi);
 }
 
 /** Formats a `[low32, high32]` digest as 16 lowercase hexadecimal digits. */

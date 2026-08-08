@@ -23,17 +23,19 @@ itself does not need `BigInt`.
 ## Status and quality
 
 The digest is experimental and currently frozen at verification value
-`0x7137E6DC`. The validated candidate passed **188/188 SMHasher3 tests** at the
-repository's pinned upstream commit. That result is a self-run on one host,
-not yet an upstream SMHasher3 result; see [quality and reproduction](docs/quality.md)
-for the exact limits of the claim.
+`0xEAA8E435`. The streaming-capable candidate passed **188/188 SMHasher3
+tests** at the repository's pinned upstream commit. That result is a self-run
+on one host, not yet an upstream SMHasher3 result; see
+[quality and reproduction](docs/quality.md) for the exact limits of the claim.
 
 The production C header is bit-exact with that candidate. The repository also
 checks:
 
 - 180 shared known-answer vectors covering every dispatch boundary;
-- the SMHasher3 verification-code construction in C and both JS engines;
-- a deterministic C-reference differential corpus through both JS engines;
+- the SMHasher3 verification-code construction in C and both one-shot JS engines;
+- a deterministic C-reference differential corpus through hybrid, pure-JS, and
+  streaming-JS modes;
+- exhaustive and randomized one-shot/streaming split equivalence;
 - input-bit and seed-bit avalanche smoke tests;
 - exact collision batteries over structured keys; and
 - every 64-bit seed with Hamming weight at most four (679,121 seeds), the
@@ -63,13 +65,27 @@ C callers already using `uint64_t` can use the convenience wrapper:
 uint64_t digest = haya32x64(bytes, length, UINT64_C(0xdeadbeefcafebabe));
 ```
 
+Unknown-length C stream, with non-destructive `digest`:
+
+```c
+haya32x64_state state;
+haya32x64_init(&state, 0xcafebabe, 0xdeadbeef);
+haya32x64_update(&state, part1, part1_length);
+haya32x64_update(&state, part2, part2_length);
+haya32x64_words digest = haya32x64_digest(&state);
+```
+
 JavaScript:
 
 ```js
-import { haya32x64, haya32x64Hex } from "haya32x64";
+import { createHaya32x64, haya32x64, haya32x64Hex } from "haya32x64";
 
 const [lo, hi] = haya32x64("hello world");
-console.log(haya32x64Hex("hello world")); // d3cd28f431c16822
+console.log(haya32x64Hex("hello world")); // a15ab6eb37d3a942
+
+const stream = createHaya32x64();
+stream.update(part1).update(part2);
+const streamed = stream.digest();
 ```
 
 The defined input-length domain is 0 through `UINT32_MAX` bytes. A null C
@@ -79,8 +95,9 @@ pointer is valid only when the length is zero.
 
 These are the candidate measurements that motivated the repository, not
 portable guarantees. Pure JavaScript was measured on Node 22 / V8 12.4; C was
-measured on one native host. Re-measurement across engines and architectures
-is part of the release bar.
+measured on one native host. They predate the streaming-capable digest and
+have not yet been rerun. Re-measurement across engines and architectures is
+part of the release bar.
 
 | Node 22, pure JS | haya32x64 | cyrb53 (biased, 53-bit) | hayahash64 BigInt | hayahash64 wasm |
 |---|---:|---:|---:|---:|
@@ -96,7 +113,7 @@ arithmetic is unavailable.
 ```sh
 make test
 
-# C-reference differential replay through both JS engines
+# C-reference differential replay through every JavaScript mode
 cc -O2 -std=c11 -Wall -Wextra -Werror \
   tests/differential/generate.c -o tests/differential/generate
 tests/differential/generate /tmp/haya32x64.bin 0x0123456789abcdef

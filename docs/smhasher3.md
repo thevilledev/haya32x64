@@ -20,8 +20,8 @@ Expected values:
 
 | mode | verification |
 |---|---:|
-| canonical little endian | `0x7137E6DC` |
-| byte-swapped | `0x1DFB2C55` |
+| canonical little endian | `0xEAA8E435` |
+| byte-swapped | `0x8705401D` |
 
 SMHasher3 is GPL-3.0-or-later. Fetching it separately keeps its test framework
 out of the public-domain library and npm artifacts; redistribution of a linked

@@ -1,6 +1,7 @@
 tests/kat
 tests/verify
 tests/quality
+tests/streaming
 tests/kat.actual.txt
 tests/differential/generate
 tests/smhasher3/smhasher3/

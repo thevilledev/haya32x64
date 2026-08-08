@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import { haya32x64, haya32x64Pure } from "../index.js";
+import { createHaya32x64, haya32x64, haya32x64Pure } from "../index.js";
 
 const corpusPath = process.env.HAYA32X64_CORPUS;
 
@@ -34,6 +34,16 @@ test(
 		for (const [engine, hash] of [
 			["hybrid", haya32x64],
 			["pure JS", haya32x64Pure],
+			["streaming JS", (bytes, seedLo, seedHi) => {
+				const stream = createHaya32x64(seedLo, seedHi);
+				let position = 0;
+				while (position < bytes.length) {
+					const chunk = 1 + ((position * 17 + bytes.length) % 257);
+					stream.update(bytes.subarray(position, position + chunk));
+					position += chunk;
+				}
+				return stream.digest();
+			}],
 		]) {
 			offset = casesOffset;
 			for (let i = 0; i < caseCount; i++) {
@@ -51,7 +61,7 @@ test(
 			assert.equal(offset, corpus.length, "trailing bytes in corpus");
 		}
 		console.error(
-			`both JS engines matched ${caseCount} C cases ` +
+			`all JS engines matched ${caseCount} C cases ` +
 			`(seed=${corpusSeedHi.toString(16).padStart(8, "0")}` +
 			`${corpusSeedLo.toString(16).padStart(8, "0")})`,
 		);

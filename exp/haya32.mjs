@@ -50,11 +50,12 @@ function injb(w) {
 	return w ^ rotl(w, 6) ^ rotl(w, 25);
 }
 
-function final4(h0, h1, h2, h3, s0, s1, C) {
+function final4(h0, h1, h2, h3, s0, s1, C, len) {
 	h1 = h1 ^ C;
 	h3 = h3 ^ rotl(C, 16);
-	const a0 = h0 ^ s0, a1 = h2 ^ KC;
-	const b0 = h1 ^ KD, b1 = h3 ^ rotl(s1, 11);
+	const lma = (len + KE) | 0;
+	const a0 = h0 ^ s0 ^ Math.imul(lma, KA), a1 = h2 ^ KC;
+	const b0 = h1 ^ KD, b1 = h3 ^ rotl(s1, 11) ^ mulhiKA(lma);
 	let x = Math.imul(a0, a1) ^ mulhi(b0, b1) ^ rotl(h1, 7);
 	let y = mulhi(a0, a1) ^ Math.imul(b0, b1) ^ rotl(h0, 19);
 	x = x ^ (x >>> 16); x = Math.imul(x, F1);
@@ -70,7 +71,8 @@ function final4(h0, h1, h2, h3, s0, s1, C) {
 
 // buf: Uint8Array; seedLo/seedHi: u32 halves of the 64-bit seed.
 export function haya32x64(buf, seedLo = 0, seedHi = 0) {
-	let l = buf.length;
+	const len = buf.length;
+	let l = len;
 	let p = 0;
 
 	// Feistel premix: (s0, s1) is a bijection of the 64-bit seed.
@@ -78,9 +80,8 @@ export function haya32x64(buf, seedLo = 0, seedHi = 0) {
 	const u0 = seedLo ^ Math.imul(q1a, KD) ^ mulhi(q1a, KD);
 	const q0a = u0 ^ KA;
 	const v0 = seedHi ^ Math.imul(q0a, KB) ^ mulhi(q0a, KB);
-	const q2a = (l + KE) | 0;
-	const s0 = u0 ^ Math.imul(q2a, KA);
-	const s1 = v0 ^ mulhiKA(q2a);
+	const s0 = u0;
+	const s1 = v0;
 
 	if (l <= 8) {
 		let a, b;
@@ -97,7 +98,7 @@ export function haya32x64(buf, seedLo = 0, seedHi = 0) {
 		const xa = inja(a) ^ s0 ^ KB;
 		const yb = injb(b) ^ rotl(s1, 13) ^ KE;
 		return final4(Math.imul(xa, KA), mulhiKA(xa),
-			Math.imul(yb, KC), mulhi(yb, KC), s0, s1, 0);
+			Math.imul(yb, KC), mulhi(yb, KC), s0, s1, 0, len);
 	}
 
 	const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -181,7 +182,7 @@ export function haya32x64(buf, seedLo = 0, seedHi = 0) {
 		h3 = Math.imul(u, KD);
 	}
 
-	return final4(h0, h1, h2, h3, s0, s1, C);
+	return final4(h0, h1, h2, h3, s0, s1, C, len);
 }
 
 export function haya32x64Hex(buf, seedLo = 0, seedHi = 0) {

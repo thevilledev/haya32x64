@@ -298,11 +298,14 @@ static inline uint32_t hy_injb( uint32_t w ) {
     } while (0)
 
 static inline uint64_t hy_final( uint32_t h0, uint32_t h1, uint32_t h2, uint32_t h3,
-                                 uint32_t s0, uint32_t s1, uint32_t C ) {
+                                 uint32_t s0, uint32_t s1, uint32_t C,
+                                 uint32_t len ) {
     h1 ^= C;
     h3 ^= hy_rotl32(C, 16);
-    uint64_t m0 = (uint64_t)(h0 ^ s0) * (h2 ^ HY_KC);
-    uint64_t m1 = (uint64_t)(h1 ^ HY_KD) * (h3 ^ hy_rotl32(s1, 11));
+    uint64_t lm = (uint64_t)(len + HY_KE) * HY_KA;
+    uint64_t m0 = (uint64_t)(h0 ^ s0 ^ (uint32_t)lm) * (h2 ^ HY_KC);
+    uint64_t m1 = (uint64_t)(h1 ^ HY_KD) *
+                  (h3 ^ hy_rotl32(s1, 11) ^ (uint32_t)(lm >> 32));
     uint32_t x = (uint32_t)m0 ^ (uint32_t)(m1 >> 32) ^ hy_rotl32(h1, 7);
     uint32_t y = (uint32_t)(m0 >> 32) ^ (uint32_t)m1 ^ hy_rotl32(h0, 19);
     x ^= x >> 16; x *= HY_F1;
@@ -327,9 +330,8 @@ static inline uint64_t haya32x64_impl( const uint8_t * p, size_t len, uint64_t s
     uint32_t u  = slo ^ (uint32_t)q1 ^ (uint32_t)(q1 >> 32);
     uint64_t q0 = (uint64_t)(u ^ HY_KA) * HY_KB;
     uint32_t v  = shi ^ (uint32_t)q0 ^ (uint32_t)(q0 >> 32);
-    uint64_t q2 = (uint64_t)(lw + HY_KE) * HY_KA;
-    uint32_t s0 = u ^ (uint32_t)q2;
-    uint32_t s1 = v ^ (uint32_t)(q2 >> 32);
+    uint32_t s0 = u;
+    uint32_t s1 = v;
 
     if (l <= 8) {
         uint32_t a, b;
@@ -345,7 +347,7 @@ static inline uint64_t haya32x64_impl( const uint8_t * p, size_t len, uint64_t s
         uint64_t x64 = (uint64_t)(hy_inja(a) ^ s0 ^ HY_KB) * HY_KA;
         uint64_t y64 = (uint64_t)(hy_injb(b) ^ hy_rotl32(s1, 13) ^ HY_KE) * HY_KC;
         return hy_final((uint32_t)x64, (uint32_t)(x64 >> 32),
-                        (uint32_t)y64, (uint32_t)(y64 >> 32), s0, s1, 0);
+                        (uint32_t)y64, (uint32_t)(y64 >> 32), s0, s1, 0, lw);
     }
 
     uint32_t h0 = s0 ^ HY_KA;
@@ -410,7 +412,7 @@ static inline uint64_t haya32x64_impl( const uint8_t * p, size_t len, uint64_t s
         h3 = (uint32_t)((uint64_t)(h3 + hy_injb(GET_U32<bswap>(p + l - 4, 0))) * HY_KD);
     }
 
-    return hy_final(h0, h1, h2, h3, s0, s1, C);
+    return hy_final(h0, h1, h2, h3, s0, s1, C, lw);
 }
 
 //------------------------------------------------------------
@@ -482,8 +484,8 @@ REGISTER_HASH(haya32x64,
          FLAG_IMPL_MULTIPLY               |
          FLAG_IMPL_ROTATE,
    $.bits            = 64,
-   $.verification_LE = 0x7137E6DC,
-   $.verification_BE = 0x1DFB2C55,
+   $.verification_LE = 0xEAA8E435,
+   $.verification_BE = 0x8705401D,
    $.hashfn_native   = Haya32x64<false>,
    $.hashfn_bswap    = Haya32x64<true>
  );

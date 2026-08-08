@@ -24,8 +24,9 @@
 //  - Tails read overlapping whole u32 words from the end; a dedicated
 //    <= 8-byte path spreads both words with distinct 3-rotation
 //    bijections and two independent 32x64 products.
-//  - Seed is a full uint64_t, handled as two u32 words premixed with
-//    the length into (s0, s1); every lane IV derives from those.
+//  - Seed is a full uint64_t, handled as two u32 words through a
+//    bijective Feistel premix. Length enters only in the finalizer,
+//    making unknown-length streaming possible.
 //  - Finalizer: two 32x32->64 "mum" products cross the folded state
 //    halves so both digest words depend on everything, then a
 //    xorshift-multiply avalanche per half with cross injection.
@@ -97,13 +98,15 @@ static inline uint32_t haya32_injb(uint32_t w)
 // xor-accumulated product high halves.
 static inline uint64_t
 haya32_final(uint32_t h0, uint32_t h1, uint32_t h2, uint32_t h3,
-             uint32_t s0, uint32_t s1, uint32_t C)
+             uint32_t s0, uint32_t s1, uint32_t C, uint32_t len)
 {
 	h1 ^= C;
 	h3 ^= haya32_rotl(C, 16);
-	uint64_t m0 = (uint64_t)(h0 ^ s0) * (h2 ^ HAYA32_KC);
+	uint64_t lm = (uint64_t)(len + HAYA32_KE) * HAYA32_KA;
+	uint64_t m0 = (uint64_t)(h0 ^ s0 ^ (uint32_t)lm) *
+	              (h2 ^ HAYA32_KC);
 	uint64_t m1 = (uint64_t)(h1 ^ HAYA32_KD) *
-	              (h3 ^ haya32_rotl(s1, 11));
+	              (h3 ^ haya32_rotl(s1, 11) ^ (uint32_t)(lm >> 32));
 	uint32_t x = (uint32_t)m0 ^ (uint32_t)(m1 >> 32) ^
 	             haya32_rotl(h1, 7);
 	uint32_t y = (uint32_t)(m0 >> 32) ^ (uint32_t)m1 ^
@@ -129,18 +132,17 @@ haya32x64(const void *keyIn, ptrdiff_t len, uint64_t seed)
 	const uint32_t slo = (uint32_t)seed, shi = (uint32_t)(seed >> 32);
 	const uint32_t lw = (uint32_t)len;
 
-	// Premix: seed words and length -> (s0, s1); all IVs derive here.
+	// Premix the seed words before any input is read. Length is deferred to
+	// the finalizer so these IVs do not depend on a future stream total.
 	// Two Feistel rounds keep (s0, s1) a BIJECTION of the 64-bit seed
 	// (per-half lossy folds collided sparse seeds at 32-bit birthday
-	// scale - found by SMHasher3 SeedSparse); the len product is
-	// injective in len, so cross-length safety holds too.
+	// scale - found by SMHasher3 SeedSparse).
 	uint64_t q1 = (uint64_t)(shi ^ HAYA32_KC) * HAYA32_KD;
 	uint32_t u  = slo ^ (uint32_t)q1 ^ (uint32_t)(q1 >> 32);
 	uint64_t q0 = (uint64_t)(u ^ HAYA32_KA) * HAYA32_KB;
 	uint32_t v  = shi ^ (uint32_t)q0 ^ (uint32_t)(q0 >> 32);
-	uint64_t q2 = (uint64_t)(lw + HAYA32_KE) * HAYA32_KA;
-	uint32_t s0 = u ^ (uint32_t)q2;
-	uint32_t s1 = v ^ (uint32_t)(q2 >> 32);
+	uint32_t s0 = u;
+	uint32_t s1 = v;
 
 	if (l <= 8) {
 		uint32_t a, b;
@@ -159,7 +161,7 @@ haya32x64(const void *keyIn, ptrdiff_t len, uint64_t seed)
 		               haya32_rotl(s1, 13) ^ HAYA32_KE) * HAYA32_KC;
 		return haya32_final((uint32_t)x64, (uint32_t)(x64 >> 32),
 		                    (uint32_t)y64, (uint32_t)(y64 >> 32),
-		                    s0, s1, 0);
+		                    s0, s1, 0, lw);
 	}
 
 	uint32_t h0 = s0 ^ HAYA32_KA;
@@ -237,7 +239,7 @@ haya32x64(const void *keyIn, ptrdiff_t len, uint64_t seed)
 		     HAYA32_KD);
 	}
 
-	return haya32_final(h0, h1, h2, h3, s0, s1, C);
+	return haya32_final(h0, h1, h2, h3, s0, s1, C, lw);
 }
 
 #endif // HAYA32_H

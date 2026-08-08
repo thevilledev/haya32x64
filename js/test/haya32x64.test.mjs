@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import {
+	createHaya32x64,
 	digestHex,
 	getEngine,
 	haya32x64,
@@ -69,9 +70,51 @@ for (const [name, hash] of [
 			view.setUint32(i * 8 + 4, digest[1], true);
 			verificationKey[i] = i;
 		}
-		assert.equal(hash(hashes)[0], 0x7137e6dc);
+		assert.equal(hash(hashes)[0], 0xeaa8e435);
 	});
 }
+
+test("streaming digests match one-shot across update boundaries", () => {
+	const chunks = [1, 3, 4, 7, 16, 31, 32, 33, 63, 64, 127, 191, 192, 193];
+	for (let length = 0; length <= 2048; length++) {
+		const seedLo = Math.imul(length, 0x9e3779b1) >>> 0;
+		const seedHi = Math.imul(length ^ 0xdeadbeef, 0x85ebca77) >>> 0;
+		const expected = haya32x64Pure(key.subarray(0, length), seedLo, seedHi);
+		for (const size of chunks) {
+			const stream = createHaya32x64(seedLo, seedHi);
+			for (let offset = 0; offset < length; offset += size) {
+				stream.update(key.subarray(offset, Math.min(offset + size, length)));
+			}
+			assert.deepEqual(
+				stream.digest(),
+				expected,
+				`len=${length} chunk=${size}`,
+			);
+			assert.deepEqual(stream.digest(), expected, "digest is non-destructive");
+		}
+	}
+});
+
+test("a stream can be digested and then extended", () => {
+	const stream = createHaya32x64(0xcafebabe, 0xdeadbeef);
+	stream.update(key.subarray(0, 511));
+	assert.deepEqual(
+		stream.digest(),
+		haya32x64Pure(key.subarray(0, 511), 0xcafebabe, 0xdeadbeef),
+	);
+	stream.update(key.subarray(511, 2048));
+	assert.deepEqual(
+		stream.digest(),
+		haya32x64Pure(key.subarray(0, 2048), 0xcafebabe, 0xdeadbeef),
+	);
+	assert.equal(stream.digestHex(), digestHex(stream.digest()));
+});
+
+test("streaming string chunks use UTF-8", () => {
+	const stream = createHaya32x64();
+	stream.update("häyä").update("häsh 🚀");
+	assert.deepEqual(stream.digest(), haya32x64Pure("häyähäsh 🚀"));
+});
 
 test("the embedded wasm reference engine is active", () => {
 	assert.equal(getEngine(), "hybrid");
@@ -80,7 +123,7 @@ test("the embedded wasm reference engine is active", () => {
 test("string input uses UTF-8 and formats in high/low display order", () => {
 	const encoded = new TextEncoder().encode("häyähäsh 🚀");
 	assert.deepEqual(haya32x64("häyähäsh 🚀"), haya32x64(encoded));
-	assert.equal(haya32x64Hex("hello world"), "d3cd28f431c16822");
+	assert.equal(haya32x64Hex("hello world"), "a15ab6eb37d3a942");
 	assert.equal(digestHex([0x89abcdef, 0x01234567]), "0123456789abcdef");
 });
 
@@ -95,6 +138,8 @@ test("seed words are normalized and invalid inputs are rejected", () => {
 	assert.deepEqual(haya32x64("abc", -1, -1), haya32x64("abc", 0xffffffff, 0xffffffff));
 	assert.throws(() => haya32x64("abc", 1.5), RangeError);
 	assert.throws(() => haya32x64(new Uint16Array(2)), TypeError);
+	assert.throws(() => createHaya32x64(1.5), RangeError);
+	assert.throws(() => createHaya32x64().update(new Uint16Array(2)), TypeError);
 	assert.throws(() => digestHex([1]), TypeError);
 });
 

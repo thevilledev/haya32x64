@@ -46,13 +46,16 @@ function injb(w) {
 	return w ^ rotl(w, 6) ^ rotl(w, 25);
 }
 
-function final4(h0, h1, h2, h3, s0, s1, carry) {
+function final4(h0, h1, h2, h3, s0, s1, carry, length) {
 	h1 ^= carry;
 	h3 ^= rotl(carry, 16);
-	const a0 = h0 ^ s0;
+	const lengthInput = (length + KE) | 0;
+	const lengthLo = Math.imul(lengthInput, KA);
+	const lengthHi = mulhiKA(lengthInput);
+	const a0 = h0 ^ s0 ^ lengthLo;
 	const a1 = h2 ^ KC;
 	const b0 = h1 ^ KD;
-	const b1 = h3 ^ rotl(s1, 11);
+	const b1 = h3 ^ rotl(s1, 11) ^ lengthHi;
 	let x = Math.imul(a0, a1) ^ mulhi(b0, b1) ^ rotl(h1, 7);
 	let y = mulhi(a0, a1) ^ Math.imul(b0, b1) ^ rotl(h0, 19);
 	x ^= x >>> 16;
@@ -76,7 +79,8 @@ function final4(h0, h1, h2, h3, s0, s1, carry) {
  * @returns {[number, number]} digest words in [low, high] order
  */
 export function hashPure(bytes, seedLo = 0, seedHi = 0) {
-	let remaining = bytes.length;
+	const total = bytes.length;
+	let remaining = total;
 	let offset = 0;
 
 	// Two-round Feistel seed premix; bijective in (seedLo, seedHi).
@@ -84,9 +88,8 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 	const u0 = seedLo ^ Math.imul(q1a, KD) ^ mulhi(q1a, KD);
 	const q0a = u0 ^ KA;
 	const v0 = seedHi ^ Math.imul(q0a, KB) ^ mulhi(q0a, KB);
-	const q2a = (remaining + KE) | 0;
-	const s0 = u0 ^ Math.imul(q2a, KA);
-	const s1 = v0 ^ mulhiKA(q2a);
+	const s0 = u0;
+	const s1 = v0;
 
 	if (remaining <= 8) {
 		let a;
@@ -110,7 +113,7 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 		return final4(
 			Math.imul(xa, KA), mulhiKA(xa),
 			Math.imul(yb, KC), mulhi(yb, KC),
-			s0, s1, 0,
+			s0, s1, 0, total,
 		);
 	}
 
@@ -229,5 +232,250 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 		h3 = Math.imul(laneInput, KD);
 	}
 
-	return final4(h0, h1, h2, h3, s0, s1, carry);
+	return final4(h0, h1, h2, h3, s0, s1, carry, total);
+}
+
+const STREAM_KEEP = 64;
+const STREAM_CAPACITY = 192;
+
+function streamBlocks(state, bytes, offset, length) {
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	let h0 = state.h[0];
+	let h1 = state.h[1];
+	let h2 = state.h[2];
+	let h3 = state.h[3];
+	let h4 = state.h[4];
+	let h5 = state.h[5];
+	let h6 = state.h[6];
+	let h7 = state.h[7];
+	let previous = state.previous;
+	let carry = state.carry;
+	const end = offset + length;
+	let word;
+	let laneInput;
+	while (offset !== end) {
+		word = view.getUint32(offset, true) | 0;
+		laneInput = h0 ^ ((word + rotl(previous, 11)) | 0);
+		h0 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 4, true) | 0;
+		laneInput = h1 ^ ((word + rotl(previous, 11)) | 0);
+		h1 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 8, true) | 0;
+		laneInput = h2 ^ ((word + rotl(previous, 11)) | 0);
+		h2 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 12, true) | 0;
+		laneInput = h3 ^ ((word + rotl(previous, 11)) | 0);
+		h3 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 16, true) | 0;
+		laneInput = h4 ^ ((word + rotl(previous, 11)) | 0);
+		h4 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 20, true) | 0;
+		laneInput = h5 ^ ((word + rotl(previous, 11)) | 0);
+		h5 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 24, true) | 0;
+		laneInput = h6 ^ ((word + rotl(previous, 11)) | 0);
+		h6 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		word = view.getUint32(offset + 28, true) | 0;
+		laneInput = h7 ^ ((word + rotl(previous, 11)) | 0);
+		h7 = Math.imul(laneInput, KA);
+		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+		previous = word;
+		h0 = (h0 + previous) | 0;
+		offset += 32;
+	}
+	state.h[0] = h0;
+	state.h[1] = h1;
+	state.h[2] = h2;
+	state.h[3] = h3;
+	state.h[4] = h4;
+	state.h[5] = h5;
+	state.h[6] = h6;
+	state.h[7] = h7;
+	state.previous = previous;
+	state.carry = carry;
+}
+
+/** Bit-exact, unknown-length streaming state for the pure-JavaScript engine. */
+export class Haya32x64PureStream {
+	constructor(seedLo = 0, seedHi = 0) {
+		if (!Number.isInteger(seedLo) || !Number.isInteger(seedHi)) {
+			throw new RangeError("seed words must be integers");
+		}
+		this.seedLo = seedLo >>> 0;
+		this.seedHi = seedHi >>> 0;
+		const q1a = (this.seedHi | 0) ^ KC;
+		const s0 = (this.seedLo | 0) ^ Math.imul(q1a, KD) ^ mulhi(q1a, KD);
+		const q0a = s0 ^ KA;
+		const s1 = (this.seedHi | 0) ^ Math.imul(q0a, KB) ^ mulhi(q0a, KB);
+		this.h = [
+			s0 ^ KA,
+			(rotl(s1, 7) + KB) | 0,
+			rotl(s0, 14) ^ KC,
+			(rotl(s1, 21) + KD) | 0,
+			(s1 + KE) | 0,
+			rotl(s0, 9) ^ KD,
+			(rotl(s1, 18) + KA) | 0,
+			rotl(s0, 27) ^ KB,
+		];
+		this.s0 = s0;
+		this.s1 = s1;
+		this.previous = 0;
+		this.carry = 0;
+		this.total = 0;
+		this.buffered = 0;
+		this.bulk = false;
+		this.buffer = new Uint8Array(STREAM_CAPACITY);
+	}
+
+	update(bytes) {
+		if (!(bytes instanceof Uint8Array)) {
+			throw new TypeError("stream input must be a Uint8Array");
+		}
+		if (bytes.length > 0xffffffff - this.total) {
+			throw new RangeError("stream length must be at most 0xffffffff bytes");
+		}
+		if (bytes.length === 0) {
+			return this;
+		}
+		this.total += bytes.length;
+		let offset = 0;
+		let remaining = bytes.length;
+
+		if (!this.bulk) {
+			const room = STREAM_CAPACITY - this.buffered;
+			if (remaining < room) {
+				this.buffer.set(bytes, this.buffered);
+				this.buffered += remaining;
+				return this;
+			}
+			this.bulk = true;
+		}
+
+		for (;;) {
+			if (this.buffered === STREAM_KEEP && remaining > STREAM_CAPACITY) {
+				const direct = Math.floor(
+					(remaining - STREAM_KEEP) / 32,
+				) * 32;
+				streamBlocks(this, this.buffer, 0, STREAM_KEEP);
+				streamBlocks(this, bytes, offset, direct);
+				offset += direct;
+				remaining -= direct;
+				this.buffered = 0;
+			}
+
+			const room = STREAM_CAPACITY - this.buffered;
+			const take = Math.min(remaining, room);
+			this.buffer.set(bytes.subarray(offset, offset + take), this.buffered);
+			this.buffered += take;
+			offset += take;
+			remaining -= take;
+			if (this.buffered < STREAM_CAPACITY) {
+				break;
+			}
+
+			const consume = (this.buffered - STREAM_KEEP) & ~31;
+			streamBlocks(this, this.buffer, 0, consume);
+			this.buffer.copyWithin(0, consume, this.buffered);
+			this.buffered -= consume;
+		}
+		return this;
+	}
+
+	digest() {
+		if (!this.bulk) {
+			return hashPure(
+				this.buffer.subarray(0, this.total),
+				this.seedLo,
+				this.seedHi,
+			);
+		}
+
+		const tail = {
+			h: this.h.slice(),
+			previous: this.previous,
+			carry: this.carry,
+		};
+		const blocks = this.buffered & ~31;
+		streamBlocks(tail, this.buffer, 0, blocks);
+		let offset = blocks;
+		let remaining = this.buffered - blocks;
+		let h0 = tail.h[0];
+		let h1 = tail.h[1];
+		let h2 = tail.h[2];
+		let h3 = tail.h[3];
+		let previous = tail.previous;
+		let carry = tail.carry;
+
+		h0 = Math.imul(h0 ^ rotl(tail.h[4], 11), KA) ^ carry;
+		h1 = Math.imul(h1 ^ rotl(tail.h[5], 19), KB);
+		h2 = Math.imul(h2 ^ rotl(tail.h[6], 7), KC) ^ rotl(carry, 16);
+		h3 = Math.imul(h3 ^ rotl(tail.h[7], 23), KD);
+
+		const view = new DataView(this.buffer.buffer);
+		let word;
+		let laneInput;
+		if (remaining >= 16) {
+			word = view.getUint32(offset, true) | 0;
+			laneInput = h0 ^ ((word + rotl(previous, 11)) | 0);
+			h0 = Math.imul(laneInput, KA);
+			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+			previous = word;
+			word = view.getUint32(offset + 4, true) | 0;
+			laneInput = h1 ^ ((word + rotl(previous, 11)) | 0);
+			h1 = Math.imul(laneInput, KA);
+			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+			previous = word;
+			word = view.getUint32(offset + 8, true) | 0;
+			laneInput = h2 ^ ((word + rotl(previous, 11)) | 0);
+			h2 = Math.imul(laneInput, KA);
+			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+			previous = word;
+			word = view.getUint32(offset + 12, true) | 0;
+			laneInput = h3 ^ ((word + rotl(previous, 11)) | 0);
+			h3 = Math.imul(laneInput, KA);
+			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
+			previous = word;
+			offset += 16;
+			remaining -= 16;
+		}
+
+		h0 = (h0 + rotl(previous, 11)) | 0;
+		if (remaining > 8) {
+			h0 = Math.imul(
+				(h0 + inja(view.getUint32(offset, true) | 0)) | 0,
+				KA,
+			);
+			h1 = Math.imul(
+				(h1 + inja(view.getUint32(offset + 4, true) | 0)) | 0,
+				KB,
+			);
+		}
+		if (remaining > 0) {
+			h2 = Math.imul(
+				(h2 + injb(view.getUint32(offset + remaining - 8, true) | 0)) | 0,
+				KC,
+			);
+			h3 = Math.imul(
+				(h3 + injb(view.getUint32(offset + remaining - 4, true) | 0)) | 0,
+				KD,
+			);
+		}
+		return final4(
+			h0, h1, h2, h3, this.s0, this.s1, carry, this.total,
+		);
+	}
 }

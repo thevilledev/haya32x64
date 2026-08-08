@@ -14,6 +14,24 @@ void *memcpy(void *destination, const void *source, size_t length)
 	return destination;
 }
 
+// Referenced by the header's streaming buffer management.  The wasm wrapper
+// currently exports only one-shot hashing, so the linker drops this until a
+// streaming wasm engine is added.
+__attribute__((no_builtin("memmove")))
+void *memmove(void *destination, const void *source, size_t length)
+{
+	unsigned char *out = destination;
+	const unsigned char *in = source;
+	if (out < in) {
+		for (size_t i = 0; i < length; i++)
+			out[i] = in[i];
+	} else {
+		for (size_t i = length; i > 0; i--)
+			out[i - 1] = in[i - 1];
+	}
+	return destination;
+}
+
 // All arguments and the result pointer are i32 at the wasm boundary.  This
 // keeps the JavaScript wrapper free of BigInt even when it uses wasm.
 __attribute__((export_name("haya32x64")))

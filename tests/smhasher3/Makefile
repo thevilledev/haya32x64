@@ -24,7 +24,9 @@ $(SRC)/.git:
 # run. It registers haya32x64 alongside the other two experiments; HASH above
 # selects only the hash this repository ships.
 install: $(SRC)/.git ../../exp/hayaexp.cpp
-	cp ../../exp/hayaexp.cpp $(SRC)/hashes/hayaexp.cpp
+	@if ! cmp -s ../../exp/hayaexp.cpp $(SRC)/hashes/hayaexp.cpp; then \
+		cp ../../exp/hayaexp.cpp $(SRC)/hashes/hayaexp.cpp; \
+	fi
 	@if grep -q 'hashes/hayaexp.cpp' $(SRC)/hashes/Hashsrc.cmake; then \
 		echo "Hashsrc.cmake already lists hayaexp.cpp"; \
 	else \

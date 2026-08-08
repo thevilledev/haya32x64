@@ -2,9 +2,9 @@ CC       ?= cc
 CFLAGS   ?= -O2 -std=c11 -Wall -Wextra -Werror
 CPPFLAGS ?=
 
-.PHONY: all test check-kat clean
+.PHONY: all test check-kat regen-kat clean
 
-all: kat verify quality
+all: kat verify quality streaming
 
 kat: kat.c ../haya32x64.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ kat.c
@@ -15,14 +15,22 @@ verify: verify.c ../haya32x64.h
 quality: quality.c ../haya32x64.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ quality.c -lm
 
+streaming: streaming.c ../haya32x64.h
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ streaming.c
+
 check-kat: kat kat.txt
 	./kat > kat.actual.txt
 	diff -u kat.txt kat.actual.txt
 	rm -f kat.actual.txt
 
-test: check-kat verify quality
+regen-kat: kat
+	./kat > kat.txt
+
+test: check-kat verify quality streaming
 	./verify
 	./quality
+	./streaming
 
 clean:
-	rm -f kat verify quality kat.actual.txt differential/generate
+	rm -f kat verify quality streaming kat.actual.txt differential/generate
+	rm -rf kat.dSYM verify.dSYM quality.dSYM streaming.dSYM

@@ -48,15 +48,35 @@ Inputs through eight bytes have a dedicated path with two independent complete
 ## Seed and finalizer
 
 The 64-bit seed is represented as two words. Two Feistel rounds make the seed
-premix a bijection of the complete pair; length is then injected with another
-complete product. An earlier design mixed each seed half through a lossy fold,
-creating a birthday-scale 32-bit bottleneck. SMHasher3 `SeedSparse` found 13
-collisions; the local Hamming-weight battery preserves that regression.
+premix a bijection of the complete pair. The lane IVs depend only on that
+premixed seed, so input can be absorbed before its final length is known. An
+earlier design mixed each seed half through a lossy fold, creating a
+birthday-scale 32-bit bottleneck. SMHasher3 `SeedSparse` found 13 collisions;
+the local Hamming-weight battery preserves that regression.
+
+Length is mixed in the finalizer as the complete product
+`(len + KE) * KA`. Its low and high words enter different variable-by-variable
+products before the fixed-odd cross-avalanche. A simpler spelling that xored
+the length product into the two output words after those products failed
+SMHasher3's `SeedZeroes` differential distribution, despite passing the local
+quality ladder.
 
 After the eight-to-four fold, the four lane words enter two complete 32×32
 products as operands. Folding lanes to 32 bits before those products created
 sequential collisions at roughly the 2^-32 scale in an earlier candidate. The
 current cross-avalanche retains a 64-bit path through both output words.
+
+## Streaming
+
+`haya32x64_state` buffers totals below 192 bytes, where finalization can call
+the tuned one-shot path directly. Once committed to bulk mode, `update`
+consumes complete 32-byte blocks from stream offset zero and keeps 64–191 bytes
+owned by the state. The two-block floor makes the final overlapping eight-byte
+tail reads safe without retaining the entire input.
+
+`haya32x64_digest` finalizes local copies of the lanes and counters. It neither
+modifies the state nor prevents later updates, and its result is identical to
+`haya32x64_hash` for every split of the same byte sequence.
 
 ## What “32-bit operations” means
 
@@ -67,5 +87,6 @@ with `uint64_t` because it is the portable spelling compilers lower to UMULL,
 feeds a 64-bit arithmetic result back as 64-bit state.
 
 The `haya32x64_hash` API supplies seeds and digests as word pairs. The
-`haya32x64` convenience wrapper only splits and joins the public `uint64_t`
-values.
+streaming API uses the same representation. The `haya32x64` and
+`haya32x64_digest64` convenience wrappers only split and join public
+`uint64_t` values.
