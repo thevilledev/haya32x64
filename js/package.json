@@ -1,19 +1,28 @@
 {
 	"name": "haya32x64",
 	"version": "0.1.0",
-	"description": "A high-quality 64-bit hash built entirely from 32-bit operations",
+	"description": "A non-cryptographic 64-bit hash built entirely from 32-bit operations",
 	"type": "module",
 	"license": "Unlicense",
+	"author": "Ville Vesilehto <ville@vesilehto.fi>",
+	"homepage": "https://github.com/thevilledev/haya32x64#readme",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/thevilledev/haya32x64.git"
+		"url": "git+https://github.com/thevilledev/haya32x64.git",
+		"directory": "js"
 	},
+	"bugs": "https://github.com/thevilledev/haya32x64/issues",
 	"keywords": [
 		"hash",
+		"hayahash",
+		"fast-hash",
+		"non-cryptographic",
 		"hashing",
 		"64-bit",
+		"32-bit",
 		"javascript",
-		"wasm"
+		"wasm",
+		"webassembly"
 	],
 	"engines": {
 		"node": ">=18"
@@ -29,6 +38,7 @@
 		},
 		"./haya32x64.wasm": "./wasm/haya32x64.wasm"
 	},
+	"sideEffects": false,
 	"files": [
 		"index.js",
 		"index.d.ts",
