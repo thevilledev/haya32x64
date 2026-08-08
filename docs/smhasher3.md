@@ -8,9 +8,8 @@ time and is not part of release artifacts.
 make -C tests/smhasher3 run
 ```
 
-The current adapter is the validated multi-candidate registration from
-`exp/hayaexp.cpp`; the harness selects only `haya32x64`. To print both computed
-verification values:
+The dedicated adapter is stored at `tests/smhasher3/haya32x64.cpp`. To print
+both computed verification values:
 
 ```sh
 make -C tests/smhasher3 verify

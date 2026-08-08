@@ -20,17 +20,15 @@ $(SRC)/.git:
 	git -C $(SRC).tmp checkout --detach $(SMHASHER3_COMMIT)
 	mv $(SRC).tmp $(SRC)
 
-# exp/hayaexp.cpp is the exact adapter used for the validated three-candidate
-# run. It registers haya32x64 alongside the other two experiments; HASH above
-# selects only the hash this repository ships.
-install: $(SRC)/.git ../../exp/hayaexp.cpp
-	@if ! cmp -s ../../exp/hayaexp.cpp $(SRC)/hashes/hayaexp.cpp; then \
-		cp ../../exp/hayaexp.cpp $(SRC)/hashes/hayaexp.cpp; \
+# Keep the dedicated adapter next to this harness.
+install: $(SRC)/.git haya32x64.cpp
+	@if ! cmp -s haya32x64.cpp $(SRC)/hashes/haya32x64.cpp; then \
+		cp haya32x64.cpp $(SRC)/hashes/haya32x64.cpp; \
 	fi
-	@if grep -q 'hashes/hayaexp.cpp' $(SRC)/hashes/Hashsrc.cmake; then \
-		echo "Hashsrc.cmake already lists hayaexp.cpp"; \
+	@if grep -q 'hashes/haya32x64.cpp' $(SRC)/hashes/Hashsrc.cmake; then \
+		echo "Hashsrc.cmake already lists haya32x64.cpp"; \
 	else \
-		awk '/^\)$$/ && !done { print "  hashes/hayaexp.cpp"; done = 1 } { print }' \
+		awk '/^\)$$/ && !done { print "  hashes/haya32x64.cpp"; done = 1 } { print }' \
 			$(SRC)/hashes/Hashsrc.cmake > $(SRC)/hashes/Hashsrc.cmake.new; \
 		mv $(SRC)/hashes/Hashsrc.cmake.new $(SRC)/hashes/Hashsrc.cmake; \
 	fi

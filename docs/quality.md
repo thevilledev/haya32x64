@@ -8,8 +8,8 @@ variant).
 The run used the pinned commit documented in [SMHasher3 setup](smhasher3.md).
 
 Important scope: this is currently a self-run result on one host and the
-candidate adapter in `exp/hayaexp.cpp`. The shipped header has been checked
-bit-for-bit against that candidate across 100,000 randomized inputs and the
+adapter in `tests/smhasher3/haya32x64.cpp`. The shipped header has been checked
+bit-for-bit against that adapter across 100,000 randomized inputs and the
 shared vectors, but an upstream SMHasher3 row and a multi-host/compiler matrix
 remain release work. “Passes SMHasher3” is evidence against known statistical
 and structural flaws, not evidence of cryptographic security.
