@@ -55,32 +55,21 @@ static inline uint32_t hy_injb( uint32_t w ) {
               (uint32_t)(p3_ >> 32);                            \
     } while (0)
 
-// The paired carry fold is algebraically identical to two serial updates per
-// pair while keeping fewer complete products live than the grouped form.
-#define HY_LANES4_PAIRED(h0, h1, h2, h3, t0, t1, t2, t3, C) do { \
-        uint64_t p0_ = (uint64_t)((h0) ^ (t0)) * HY_KA;        \
-        uint64_t p1_ = (uint64_t)((h1) ^ (t1)) * HY_KA;        \
-        (h0) = (uint32_t)p0_;                                  \
-        (h1) = (uint32_t)p1_;                                  \
-        (C) = hy_rotl32((C), 10) ^                             \
-              hy_rotl32((uint32_t)(p0_ >> 32), 5) ^            \
-              (uint32_t)(p1_ >> 32);                           \
-        p0_ = (uint64_t)((h2) ^ (t2)) * HY_KA;                 \
-        p1_ = (uint64_t)((h3) ^ (t3)) * HY_KA;                 \
-        (h2) = (uint32_t)p0_;                                  \
-        (h3) = (uint32_t)p1_;                                  \
-        (C) = hy_rotl32((C), 10) ^                             \
-              hy_rotl32((uint32_t)(p0_ >> 32), 5) ^            \
-              (uint32_t)(p1_ >> 32);                           \
-    } while (0)
-
 #if defined(__aarch64__)
-#define HY_LANES4_BULK HY_LANES4_PAIRED
 #define HY_LANES4_MID HY_LANES4_SERIAL
 #else
-#define HY_LANES4_BULK HY_LANES4_GROUPED
 #define HY_LANES4_MID HY_LANES4_GROUPED
 #endif
+
+// Bulk pair-lane absorb: one complete 32x32 product covers eight input
+// bytes.  The keyed words feed both multiplier operands and the feedback.
+#define HY_PAIR(a, b, w0, w1, k0, k1) do {                     \
+        const uint32_t u0_ = (w0) ^ (k0);                      \
+        const uint32_t u1_ = (w1) ^ (k1);                      \
+        uint64_t m_ = (uint64_t)(u0_ + (a)) * (u1_ + (b));     \
+        (a) = (uint32_t)m_ + hy_rotl32(u1_, 16);               \
+        (b) = (uint32_t)(m_ >> 32) ^ u0_;                      \
+    } while (0)
 
 static inline uint64_t hy_final( uint32_t h0, uint32_t h1,
                                  uint32_t h2, uint32_t h3,
@@ -129,29 +118,23 @@ static NEVER_INLINE void hy_bulk( hy_bulk_state & state,
 #elif defined(__GNUC__) && !defined(__clang__) && \
       (defined(__x86_64__) || defined(__i386__))
 #pragma GCC unroll 2
+#elif defined(__GNUC__) && !defined(__clang__)
+#pragma GCC unroll 4
 #endif
     while (length != 0) {
         uint32_t w0 = GET_U32<bswap>(p, 0);
         uint32_t w1 = GET_U32<bswap>(p, 4);
         uint32_t w2 = GET_U32<bswap>(p, 8);
         uint32_t w3 = GET_U32<bswap>(p, 12);
-        uint32_t t0 = w0 + hy_rotl32(wp, 11);
-        uint32_t t1 = w1 + hy_rotl32(w0, 11);
-        uint32_t t2 = w2 + hy_rotl32(w1, 11);
-        uint32_t t3 = w3 + hy_rotl32(w2, 11);
-        HY_LANES4_BULK(h0, h1, h2, h3, t0, t1, t2, t3, C);
-
         uint32_t w4 = GET_U32<bswap>(p, 16);
         uint32_t w5 = GET_U32<bswap>(p, 20);
         uint32_t w6 = GET_U32<bswap>(p, 24);
         uint32_t w7 = GET_U32<bswap>(p, 28);
-        uint32_t t4 = w4 + hy_rotl32(w3, 11);
-        uint32_t t5 = w5 + hy_rotl32(w4, 11);
-        uint32_t t6 = w6 + hy_rotl32(w5, 11);
-        uint32_t t7 = w7 + hy_rotl32(w6, 11);
-        HY_LANES4_BULK(h4, h5, h6, h7, t4, t5, t6, t7, C);
+        HY_PAIR(h0, h4, w0, w1, HY_KA, HY_KB);
+        HY_PAIR(h1, h5, w2, w3, HY_KB, HY_KC);
+        HY_PAIR(h2, h6, w4, w5, HY_KC, HY_KD);
+        HY_PAIR(h3, h7, w6, w7, HY_KD, HY_KE);
         wp = w7;
-        h0 += wp;
         p += 32;
         length -= 32;
     }
@@ -234,11 +217,11 @@ static inline uint64_t haya32x64_impl( const uint8_t * p, size_t len,
         C = bulk.carry;
         p += blocks;
         l -= blocks;
-        h0 = (uint32_t)((uint64_t)(h0 ^ hy_rotl32(h4, 11)) * HY_KA) ^ C;
-        h1 = (uint32_t)((uint64_t)(h1 ^ hy_rotl32(h5, 19)) * HY_KB);
-        h2 = (uint32_t)((uint64_t)(h2 ^ hy_rotl32(h6, 7)) * HY_KC) ^
+        h0 = (uint32_t)((uint64_t)(h0 ^ hy_rotl32(h5, 11)) * HY_KA) ^ C;
+        h1 = (uint32_t)((uint64_t)(h1 ^ hy_rotl32(h6, 19)) * HY_KB);
+        h2 = (uint32_t)((uint64_t)(h2 ^ hy_rotl32(h7, 7)) * HY_KC) ^
              hy_rotl32(C, 16);
-        h3 = (uint32_t)((uint64_t)(h3 ^ hy_rotl32(h7, 23)) * HY_KD);
+        h3 = (uint32_t)((uint64_t)(h3 ^ hy_rotl32(h4, 23)) * HY_KD);
     }
 
     while (l >= 16) {
@@ -296,8 +279,8 @@ REGISTER_HASH(haya32x64,
          FLAG_IMPL_MULTIPLY              |
          FLAG_IMPL_ROTATE,
    $.bits            = 64,
-   $.verification_LE = 0xEAA8E435,
-   $.verification_BE = 0x8705401D,
+   $.verification_LE = 0xA860AB01,
+   $.verification_BE = 0x5F259261,
    $.hashfn_native   = Haya32x64<false>,
    $.hashfn_bswap    = Haya32x64<true>
  );

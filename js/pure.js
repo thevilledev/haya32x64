@@ -192,10 +192,10 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 		offset += blocks;
 		remaining -= blocks;
 
-		h0 = Math.imul(h0 ^ rotl(h4, 11), KA) ^ carry;
-		h1 = Math.imul(h1 ^ rotl(h5, 19), KB);
-		h2 = Math.imul(h2 ^ rotl(h6, 7), KC) ^ rotl(carry, 16);
-		h3 = Math.imul(h3 ^ rotl(h7, 23), KD);
+		h0 = Math.imul(h0 ^ rotl(h5, 11), KA) ^ carry;
+		h1 = Math.imul(h1 ^ rotl(h6, 19), KB);
+		h2 = Math.imul(h2 ^ rotl(h7, 7), KC) ^ rotl(carry, 16);
+		h3 = Math.imul(h3 ^ rotl(h4, 23), KD);
 	}
 
 	while (remaining >= 16) {
@@ -258,48 +258,37 @@ function streamBlocks(state, bytes, offset, length) {
 	let h6 = state.h[6];
 	let h7 = state.h[7];
 	let previous = state.previous;
-	let carry = state.carry;
 	const end = offset + length;
+	// Pair-lane bulk kernel: pair i is (h[i], h[i+4]); one full 32x32
+	// product absorbs eight bytes.  The carry accumulator is untouched
+	// here; it stays zero until the 16-byte remainder stripes.
 	while (offset !== end) {
-		const w0 = view.getUint32(offset, true) | 0;
-		const w1 = view.getUint32(offset + 4, true) | 0;
-		const w2 = view.getUint32(offset + 8, true) | 0;
-		const w3 = view.getUint32(offset + 12, true) | 0;
-		const lane0 = h0 ^ ((w0 + rotl(previous, 11)) | 0);
-		const lane1 = h1 ^ ((w1 + rotl(w0, 11)) | 0);
-		const lane2 = h2 ^ ((w2 + rotl(w1, 11)) | 0);
-		const lane3 = h3 ^ ((w3 + rotl(w2, 11)) | 0);
-		const high0 = mulhiKA(lane0);
-		const high1 = mulhiKA(lane1);
-		const high2 = mulhiKA(lane2);
-		const high3 = mulhiKA(lane3);
-		h0 = Math.imul(lane0, KA);
-		h1 = Math.imul(lane1, KA);
-		h2 = Math.imul(lane2, KA);
-		h3 = Math.imul(lane3, KA);
-		carry = rotl(carry, 20) ^ rotl(high0, 15) ^
-			rotl(high1, 10) ^ rotl(high2, 5) ^ high3;
-
-		const w4 = view.getUint32(offset + 16, true) | 0;
-		const w5 = view.getUint32(offset + 20, true) | 0;
-		const w6 = view.getUint32(offset + 24, true) | 0;
+		const u0 = (view.getUint32(offset, true) | 0) ^ KA;
+		const u1 = (view.getUint32(offset + 4, true) | 0) ^ KB;
+		const u2 = (view.getUint32(offset + 8, true) | 0) ^ KB;
+		const u3 = (view.getUint32(offset + 12, true) | 0) ^ KC;
+		const u4 = (view.getUint32(offset + 16, true) | 0) ^ KC;
+		const u5 = (view.getUint32(offset + 20, true) | 0) ^ KD;
+		const u6 = (view.getUint32(offset + 24, true) | 0) ^ KD;
 		const w7 = view.getUint32(offset + 28, true) | 0;
-		const lane4 = h4 ^ ((w4 + rotl(w3, 11)) | 0);
-		const lane5 = h5 ^ ((w5 + rotl(w4, 11)) | 0);
-		const lane6 = h6 ^ ((w6 + rotl(w5, 11)) | 0);
-		const lane7 = h7 ^ ((w7 + rotl(w6, 11)) | 0);
-		const high4 = mulhiKA(lane4);
-		const high5 = mulhiKA(lane5);
-		const high6 = mulhiKA(lane6);
-		const high7 = mulhiKA(lane7);
-		h4 = Math.imul(lane4, KA);
-		h5 = Math.imul(lane5, KA);
-		h6 = Math.imul(lane6, KA);
-		h7 = Math.imul(lane7, KA);
-		carry = rotl(carry, 20) ^ rotl(high4, 15) ^
-			rotl(high5, 10) ^ rotl(high6, 5) ^ high7;
+		const u7 = w7 ^ KE;
+		const x0 = (u0 + h0) | 0;
+		const y0 = (u1 + h4) | 0;
+		h0 = (Math.imul(x0, y0) + rotl(u1, 16)) | 0;
+		h4 = mulhi(x0, y0) ^ u0;
+		const x1 = (u2 + h1) | 0;
+		const y1 = (u3 + h5) | 0;
+		h1 = (Math.imul(x1, y1) + rotl(u3, 16)) | 0;
+		h5 = mulhi(x1, y1) ^ u2;
+		const x2 = (u4 + h2) | 0;
+		const y2 = (u5 + h6) | 0;
+		h2 = (Math.imul(x2, y2) + rotl(u5, 16)) | 0;
+		h6 = mulhi(x2, y2) ^ u4;
+		const x3 = (u6 + h3) | 0;
+		const y3 = (u7 + h7) | 0;
+		h3 = (Math.imul(x3, y3) + rotl(u7, 16)) | 0;
+		h7 = mulhi(x3, y3) ^ u6;
 		previous = w7;
-		h0 = (h0 + previous) | 0;
 		offset += 32;
 	}
 	state.h[0] = h0;
@@ -311,7 +300,6 @@ function streamBlocks(state, bytes, offset, length) {
 	state.h[6] = h6;
 	state.h[7] = h7;
 	state.previous = previous;
-	state.carry = carry;
 }
 
 /** Bit-exact, unknown-length streaming state for the pure-JavaScript engine. */
@@ -425,10 +413,10 @@ export class Haya32x64PureStream {
 		let previous = tail.previous;
 		let carry = tail.carry;
 
-		h0 = Math.imul(h0 ^ rotl(tail.h[4], 11), KA) ^ carry;
-		h1 = Math.imul(h1 ^ rotl(tail.h[5], 19), KB);
-		h2 = Math.imul(h2 ^ rotl(tail.h[6], 7), KC) ^ rotl(carry, 16);
-		h3 = Math.imul(h3 ^ rotl(tail.h[7], 23), KD);
+		h0 = Math.imul(h0 ^ rotl(tail.h[5], 11), KA) ^ carry;
+		h1 = Math.imul(h1 ^ rotl(tail.h[6], 19), KB);
+		h2 = Math.imul(h2 ^ rotl(tail.h[7], 7), KC) ^ rotl(carry, 16);
+		h3 = Math.imul(h3 ^ rotl(tail.h[4], 23), KD);
 
 		const view = new DataView(this.buffer.buffer);
 		let word;
