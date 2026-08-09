@@ -132,17 +132,175 @@ haya32x64_internal_seed(uint32_t seed_lo, uint32_t seed_hi,
 	*s1 = v;
 }
 
-// One absorb.  The lane receives the low product half; the high half enters
-// the accumulator.  The macro keeps the eight-lane block spelling compact.
-#define HAYA32X64_INTERNAL_LANE(h, t, carry) \
+// The grouped form exposes four independent products to superscalar CPUs.
+// Folding their high halves is algebraically identical to four serial
+// `carry = rotl(carry, 5) ^ high` steps.  x86 benefits from exposing all four
+// products; AArch64 performs best with the lower-pressure paired form below.
+#define HAYA32X64_INTERNAL_LANES4_GROUPED(h0, h1, h2, h3, \
+					  t0, t1, t2, t3, carry) \
 	do { \
-		haya32x64_words haya32x64_product_ = \
-			haya32x64_internal_mul((h) ^ (t), \
-			                         HAYA32X64_INTERNAL_KA); \
-		(h) = haya32x64_product_.lo; \
-		(carry) = haya32x64_internal_rotl((carry), 5) ^ \
-		          haya32x64_product_.hi; \
+		haya32x64_words haya32x64_p0_ = haya32x64_internal_mul( \
+			(h0) ^ (t0), HAYA32X64_INTERNAL_KA); \
+		haya32x64_words haya32x64_p1_ = haya32x64_internal_mul( \
+			(h1) ^ (t1), HAYA32X64_INTERNAL_KA); \
+		haya32x64_words haya32x64_p2_ = haya32x64_internal_mul( \
+			(h2) ^ (t2), HAYA32X64_INTERNAL_KA); \
+		haya32x64_words haya32x64_p3_ = haya32x64_internal_mul( \
+			(h3) ^ (t3), HAYA32X64_INTERNAL_KA); \
+		(h0) = haya32x64_p0_.lo; \
+		(h1) = haya32x64_p1_.lo; \
+		(h2) = haya32x64_p2_.lo; \
+		(h3) = haya32x64_p3_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 20) ^ \
+			haya32x64_internal_rotl(haya32x64_p0_.hi, 15) ^ \
+			haya32x64_internal_rotl(haya32x64_p1_.hi, 10) ^ \
+			haya32x64_internal_rotl(haya32x64_p2_.hi, 5) ^ \
+			haya32x64_p3_.hi; \
 	} while (0)
+
+#define HAYA32X64_INTERNAL_LANES4_SERIAL(h0, h1, h2, h3, \
+					 t0, t1, t2, t3, carry) \
+	do { \
+		haya32x64_words haya32x64_p_ = haya32x64_internal_mul( \
+			(h0) ^ (t0), HAYA32X64_INTERNAL_KA); \
+		(h0) = haya32x64_p_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 5) ^ \
+			haya32x64_p_.hi; \
+		haya32x64_p_ = haya32x64_internal_mul( \
+			(h1) ^ (t1), HAYA32X64_INTERNAL_KA); \
+		(h1) = haya32x64_p_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 5) ^ \
+			haya32x64_p_.hi; \
+		haya32x64_p_ = haya32x64_internal_mul( \
+			(h2) ^ (t2), HAYA32X64_INTERNAL_KA); \
+		(h2) = haya32x64_p_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 5) ^ \
+			haya32x64_p_.hi; \
+		haya32x64_p_ = haya32x64_internal_mul( \
+			(h3) ^ (t3), HAYA32X64_INTERNAL_KA); \
+		(h3) = haya32x64_p_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 5) ^ \
+			haya32x64_p_.hi; \
+	} while (0)
+
+// Pairing is the AArch64 bulk sweet spot: it shortens the carry chain without
+// the register pressure of keeping four complete products live at once.
+#define HAYA32X64_INTERNAL_LANES4_PAIRED(h0, h1, h2, h3, \
+					 t0, t1, t2, t3, carry) \
+	do { \
+		haya32x64_words haya32x64_p0_ = haya32x64_internal_mul( \
+			(h0) ^ (t0), HAYA32X64_INTERNAL_KA); \
+		haya32x64_words haya32x64_p1_ = haya32x64_internal_mul( \
+			(h1) ^ (t1), HAYA32X64_INTERNAL_KA); \
+		(h0) = haya32x64_p0_.lo; \
+		(h1) = haya32x64_p1_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 10) ^ \
+			haya32x64_internal_rotl(haya32x64_p0_.hi, 5) ^ \
+			haya32x64_p1_.hi; \
+		haya32x64_p0_ = haya32x64_internal_mul( \
+			(h2) ^ (t2), HAYA32X64_INTERNAL_KA); \
+		haya32x64_p1_ = haya32x64_internal_mul( \
+			(h3) ^ (t3), HAYA32X64_INTERNAL_KA); \
+		(h2) = haya32x64_p0_.lo; \
+		(h3) = haya32x64_p1_.lo; \
+		(carry) = haya32x64_internal_rotl((carry), 10) ^ \
+			haya32x64_internal_rotl(haya32x64_p0_.hi, 5) ^ \
+			haya32x64_p1_.hi; \
+	} while (0)
+
+#if defined(__aarch64__)
+#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_PAIRED
+#elif !defined(__x86_64__) && !defined(_M_X64) && \
+      !defined(__i386__) && !defined(_M_IX86)
+#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_SERIAL
+#else
+#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_GROUPED
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64) || \
+    defined(__i386__) || defined(_M_IX86)
+#define HAYA32X64_INTERNAL_LANES4_MID HAYA32X64_INTERNAL_LANES4_GROUPED
+#else
+#define HAYA32X64_INTERNAL_LANES4_MID HAYA32X64_INTERNAL_LANES4_SERIAL
+#endif
+
+#if defined(_MSC_VER)
+#define HAYA32X64_INTERNAL_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define HAYA32X64_INTERNAL_NOINLINE __attribute__((noinline))
+#else
+#define HAYA32X64_INTERNAL_NOINLINE
+#endif
+
+typedef struct haya32x64_internal_bulk_state {
+	uint32_t h[8];
+	uint32_t previous;
+	uint32_t carry;
+} haya32x64_internal_bulk_state;
+
+// Keep the large, architecture-tuned loop outside the one-shot function.  In
+// addition to improving bulk scheduling, this leaves the hot <=31-byte paths
+// compact enough for front ends and JIT-style native wrappers to optimize.
+static HAYA32X64_INTERNAL_NOINLINE void
+haya32x64_internal_bulk(haya32x64_internal_bulk_state *state,
+			const uint8_t *p, size_t length)
+{
+	uint32_t h0 = state->h[0];
+	uint32_t h1 = state->h[1];
+	uint32_t h2 = state->h[2];
+	uint32_t h3 = state->h[3];
+	uint32_t h4 = state->h[4];
+	uint32_t h5 = state->h[5];
+	uint32_t h6 = state->h[6];
+	uint32_t h7 = state->h[7];
+	uint32_t previous = state->previous;
+	uint32_t carry = state->carry;
+
+#if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
+#pragma GCC unroll 8
+#elif defined(__GNUC__) && !defined(__clang__) && \
+      (defined(__x86_64__) || defined(__i386__))
+#pragma GCC unroll 2
+#endif
+	while (length != 0) {
+		uint32_t w0 = haya32x64_internal_load32le(p + 0);
+		uint32_t w1 = haya32x64_internal_load32le(p + 4);
+		uint32_t w2 = haya32x64_internal_load32le(p + 8);
+		uint32_t w3 = haya32x64_internal_load32le(p + 12);
+		uint32_t t0 = w0 + haya32x64_internal_rotl(previous, 11);
+		uint32_t t1 = w1 + haya32x64_internal_rotl(w0, 11);
+		uint32_t t2 = w2 + haya32x64_internal_rotl(w1, 11);
+		uint32_t t3 = w3 + haya32x64_internal_rotl(w2, 11);
+		HAYA32X64_INTERNAL_LANES4_BULK(
+			h0, h1, h2, h3, t0, t1, t2, t3, carry);
+
+		uint32_t w4 = haya32x64_internal_load32le(p + 16);
+		uint32_t w5 = haya32x64_internal_load32le(p + 20);
+		uint32_t w6 = haya32x64_internal_load32le(p + 24);
+		uint32_t w7 = haya32x64_internal_load32le(p + 28);
+		uint32_t t4 = w4 + haya32x64_internal_rotl(w3, 11);
+		uint32_t t5 = w5 + haya32x64_internal_rotl(w4, 11);
+		uint32_t t6 = w6 + haya32x64_internal_rotl(w5, 11);
+		uint32_t t7 = w7 + haya32x64_internal_rotl(w6, 11);
+		HAYA32X64_INTERNAL_LANES4_BULK(
+			h4, h5, h6, h7, t4, t5, t6, t7, carry);
+		previous = w7;
+		h0 += previous;
+		p += 32;
+		length -= 32;
+	}
+
+	state->h[0] = h0;
+	state->h[1] = h1;
+	state->h[2] = h2;
+	state->h[3] = h3;
+	state->h[4] = h4;
+	state->h[5] = h5;
+	state->h[6] = h6;
+	state->h[7] = h7;
+	state->previous = previous;
+	state->carry = carry;
+}
 
 static inline haya32x64_words
 haya32x64_internal_final(uint32_t h0, uint32_t h1,
@@ -226,53 +384,34 @@ haya32x64_hash(const void *key, size_t len, uint32_t seed_lo, uint32_t seed_hi)
 	uint32_t h1 = haya32x64_internal_rotl(s1, 7) + HAYA32X64_INTERNAL_KB;
 	uint32_t h2 = haya32x64_internal_rotl(s0, 14) ^ HAYA32X64_INTERNAL_KC;
 	uint32_t h3 = haya32x64_internal_rotl(s1, 21) + HAYA32X64_INTERNAL_KD;
-	uint32_t w;
 	uint32_t previous = 0;
 	uint32_t carry = 0;
 
 	if (l >= 128) {
-		uint32_t h4 = s1 + HAYA32X64_INTERNAL_KE;
-		uint32_t h5 = haya32x64_internal_rotl(s0, 9) ^ HAYA32X64_INTERNAL_KD;
-		uint32_t h6 = haya32x64_internal_rotl(s1, 18) + HAYA32X64_INTERNAL_KA;
-		uint32_t h7 = haya32x64_internal_rotl(s0, 27) ^ HAYA32X64_INTERNAL_KB;
-		do {
-			uint32_t t;
-			w = haya32x64_internal_load32le(p + 0);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h0, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 4);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h1, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 8);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h2, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 12);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h3, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 16);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h4, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 20);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h5, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 24);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h6, t, carry);
-			previous = w;
-			w = haya32x64_internal_load32le(p + 28);
-			t = w + haya32x64_internal_rotl(previous, 11);
-			HAYA32X64_INTERNAL_LANE(h7, t, carry);
-			previous = w;
-			h0 += previous;
-			p += 32;
-			l -= 32;
-		} while (l >= 32);
+		haya32x64_internal_bulk_state bulk = {{
+			h0,
+			h1,
+			h2,
+			h3,
+			s1 + HAYA32X64_INTERNAL_KE,
+			haya32x64_internal_rotl(s0, 9) ^ HAYA32X64_INTERNAL_KD,
+			haya32x64_internal_rotl(s1, 18) + HAYA32X64_INTERNAL_KA,
+			haya32x64_internal_rotl(s0, 27) ^ HAYA32X64_INTERNAL_KB,
+		}, previous, carry};
+		size_t blocks = l & ~(size_t)31;
+		haya32x64_internal_bulk(&bulk, p, blocks);
+		h0 = bulk.h[0];
+		h1 = bulk.h[1];
+		h2 = bulk.h[2];
+		h3 = bulk.h[3];
+		uint32_t h4 = bulk.h[4];
+		uint32_t h5 = bulk.h[5];
+		uint32_t h6 = bulk.h[6];
+		uint32_t h7 = bulk.h[7];
+		previous = bulk.previous;
+		carry = bulk.carry;
+		p += blocks;
+		l -= blocks;
 
 		h0 = haya32x64_internal_mul(
 			h0 ^ haya32x64_internal_rotl(h4, 11),
@@ -292,23 +431,17 @@ haya32x64_hash(const void *key, size_t len, uint32_t seed_lo, uint32_t seed_hi)
 	// This path sees at most 31 stripes before the final tail, staying below
 	// the 32-stripe orbit of the absorb rotation.
 	while (l >= 16) {
-		uint32_t t;
-		w = haya32x64_internal_load32le(p + 0);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h0, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 4);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h1, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 8);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h2, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 12);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h3, t, carry);
-		previous = w;
+		uint32_t w0 = haya32x64_internal_load32le(p + 0);
+		uint32_t w1 = haya32x64_internal_load32le(p + 4);
+		uint32_t w2 = haya32x64_internal_load32le(p + 8);
+		uint32_t w3 = haya32x64_internal_load32le(p + 12);
+		uint32_t t0 = w0 + haya32x64_internal_rotl(previous, 11);
+		uint32_t t1 = w1 + haya32x64_internal_rotl(w0, 11);
+		uint32_t t2 = w2 + haya32x64_internal_rotl(w1, 11);
+		uint32_t t3 = w3 + haya32x64_internal_rotl(w2, 11);
+		HAYA32X64_INTERNAL_LANES4_MID(
+			h0, h1, h2, h3, t0, t1, t2, t3, carry);
+		previous = w3;
 		p += 16;
 		l -= 16;
 	}
@@ -393,65 +526,14 @@ static inline void
 haya32x64_internal_stream_blocks(haya32x64_state *state,
 				  const uint8_t *p, size_t length)
 {
-	uint32_t h0 = state->h[0];
-	uint32_t h1 = state->h[1];
-	uint32_t h2 = state->h[2];
-	uint32_t h3 = state->h[3];
-	uint32_t h4 = state->h[4];
-	uint32_t h5 = state->h[5];
-	uint32_t h6 = state->h[6];
-	uint32_t h7 = state->h[7];
-	uint32_t previous = state->previous;
-	uint32_t carry = state->carry;
-	while (length != 0) {
-		uint32_t w;
-		uint32_t t;
-		w = haya32x64_internal_load32le(p + 0);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h0, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 4);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h1, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 8);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h2, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 12);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h3, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 16);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h4, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 20);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h5, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 24);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h6, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 28);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h7, t, carry);
-		previous = w;
-		h0 += previous;
-		p += 32;
-		length -= 32;
-	}
-	state->h[0] = h0;
-	state->h[1] = h1;
-	state->h[2] = h2;
-	state->h[3] = h3;
-	state->h[4] = h4;
-	state->h[5] = h5;
-	state->h[6] = h6;
-	state->h[7] = h7;
-	state->previous = previous;
-	state->carry = carry;
+	haya32x64_internal_bulk_state bulk;
+	memcpy(bulk.h, state->h, sizeof(bulk.h));
+	bulk.previous = state->previous;
+	bulk.carry = state->carry;
+	haya32x64_internal_bulk(&bulk, p, length);
+	memcpy(state->h, bulk.h, sizeof(state->h));
+	state->previous = bulk.previous;
+	state->carry = bulk.carry;
 }
 
 // The caller must keep the cumulative length within UINT32_MAX, the defined
@@ -529,44 +611,24 @@ haya32x64_digest(const haya32x64_state *state)
 	const uint8_t *p = state->buffer;
 	size_t l = state->buffered;
 
-	while (l >= 32) {
-		uint32_t w;
-		uint32_t t;
-		w = haya32x64_internal_load32le(p + 0);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h0, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 4);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h1, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 8);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h2, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 12);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h3, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 16);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h4, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 20);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h5, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 24);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h6, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 28);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h7, t, carry);
-		previous = w;
-		h0 += previous;
-		p += 32;
-		l -= 32;
+	if (l >= 32) {
+		haya32x64_internal_bulk_state bulk = {{
+			h0, h1, h2, h3, h4, h5, h6, h7,
+		}, previous, carry};
+		size_t blocks = l & ~(size_t)31;
+		haya32x64_internal_bulk(&bulk, p, blocks);
+		h0 = bulk.h[0];
+		h1 = bulk.h[1];
+		h2 = bulk.h[2];
+		h3 = bulk.h[3];
+		h4 = bulk.h[4];
+		h5 = bulk.h[5];
+		h6 = bulk.h[6];
+		h7 = bulk.h[7];
+		previous = bulk.previous;
+		carry = bulk.carry;
+		p += blocks;
+		l -= blocks;
 	}
 
 	h0 = haya32x64_internal_mul(
@@ -581,24 +643,17 @@ haya32x64_digest(const haya32x64_state *state)
 		h3 ^ haya32x64_internal_rotl(h7, 23), HAYA32X64_INTERNAL_KD).lo;
 
 	if (l >= 16) {
-		uint32_t w;
-		uint32_t t;
-		w = haya32x64_internal_load32le(p + 0);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h0, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 4);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h1, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 8);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h2, t, carry);
-		previous = w;
-		w = haya32x64_internal_load32le(p + 12);
-		t = w + haya32x64_internal_rotl(previous, 11);
-		HAYA32X64_INTERNAL_LANE(h3, t, carry);
-		previous = w;
+		uint32_t w0 = haya32x64_internal_load32le(p + 0);
+		uint32_t w1 = haya32x64_internal_load32le(p + 4);
+		uint32_t w2 = haya32x64_internal_load32le(p + 8);
+		uint32_t w3 = haya32x64_internal_load32le(p + 12);
+		uint32_t t0 = w0 + haya32x64_internal_rotl(previous, 11);
+		uint32_t t1 = w1 + haya32x64_internal_rotl(w0, 11);
+		uint32_t t2 = w2 + haya32x64_internal_rotl(w1, 11);
+		uint32_t t3 = w3 + haya32x64_internal_rotl(w2, 11);
+		HAYA32X64_INTERNAL_LANES4_MID(
+			h0, h1, h2, h3, t0, t1, t2, t3, carry);
+		previous = w3;
 		p += 16;
 		l -= 16;
 	}

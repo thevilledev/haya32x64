@@ -10,9 +10,11 @@ performance guarantee or a multi-instance distribution.
 | EC2 `c8g.2xlarge` | Arm Neoverse V2 | AArch64 | 8 |
 
 Both hosts ran Ubuntu 26.04 with Linux 7.0.0-1010-aws, GCC 15.2.0, and
-Node.js 24.18.0 / V8 13.6.233.17-node.50. Tests and benchmarks used digest
-revision `a98c011de2e36ba272bdbbf8c7891f64a734295a`. Timed work was pinned to
-CPU 2 and the other CPUs were left idle.
+Node.js 24.18.0 / V8 13.6.233.17-node.50. The optimized worktree was based on
+revision `a98c011de2e36ba272bdbbf8c7891f64a734295a`; the focused artifacts mark
+it as dirty so they cannot be mistaken for that base commit. The digest and
+verification values are unchanged. Timed work was pinned to CPU 2 and the
+other CPUs were left idle.
 
 ## Validation performed
 
@@ -26,6 +28,27 @@ SMHasher3's `SpeedSmall` and `SpeedBulk` suites also completed for every native
 comparator below. These runs measure speed only. The existing 188/188 quality
 result and its narrower scope are documented in [quality and
 verification](quality.md).
+
+## What limited the original implementation
+
+The algorithm was not waiting on another statistical compromise. Three code
+generation issues accounted for the gap:
+
+- The source updated the high-product carry after every lane. Although lane
+  products are independent, that spelling presented compilers with a serial
+  rotate/xor chain around them.
+- One-shot JavaScript duplicated the full eight-lane loop. Its large function
+  compiled reasonably on x86 V8 but disastrously on AArch64 V8; the already
+  compact streaming loop exposed that discrepancy.
+- One generic native loop schedule could not cover both AMD and Arm multiply
+  latency. The best measured x86 kernel groups four products and unrolls two
+  blocks. AArch64 groups products in pairs and unrolls eight blocks. The large
+  kernels are kept out of line so short-key code does not inherit their code
+  size and register pressure.
+
+All transformations are algebraic scheduling changes. The C KATs, both
+SMHasher3 endian verification values, streaming boundary suite, and 4,096-case
+C-to-JavaScript differential corpus remained bit-exact on both hosts.
 
 ## JavaScript results
 
@@ -44,8 +67,8 @@ baselines, not equal-quality 64-bit substitutes.
 
 | algorithm | bits | C8a 4 B ns | C8a 8 B ns | C8g 4 B ns | C8g 8 B ns |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 pure JS | 64 | 23.1 | 22.3 | 34.5 | 34.6 |
-| haya32x64 hybrid | 64 | 23.1 | 22.3 | 34.9 | 34.9 |
+| haya32x64 pure JS | 64 | 22.2 | 22.1 | 34.1 | 34.0 |
+| haya32x64 hybrid | 64 | 23.3 | 23.3 | 34.4 | 34.5 |
 | hayahash64 BigInt | 64 | 496.6 | 527.5 | 701.8 | 638.6 |
 | hayahash64 wasm | 64 | 48.1 | 48.8 | 80.4 | 79.9 |
 | xxhash-wasm XXH64 | 64 | 39.4 | 40.1 | 63.8 | 72.1 |
@@ -54,8 +77,8 @@ baselines, not equal-quality 64-bit substitutes.
 
 | algorithm | bits | C8a 1 MiB MB/s | C8g 1 MiB MB/s |
 |---|---:|---:|---:|
-| haya32x64 pure JS | 64 | 1,062 | 251 |
-| haya32x64 hybrid | 64 | 6,921 | 4,785 |
+| haya32x64 pure JS | 64 | 1,848 | 1,160 |
+| haya32x64 hybrid | 64 | 6,884 | 4,765 |
 | hayahash64 BigInt | 64 | 83 | 67 |
 | hayahash64 wasm | 64 | 16,210 | 11,431 |
 | xxhash-wasm XXH64 | 64 | 16,092 | 11,067 |
@@ -67,16 +90,16 @@ visible in the public-API medians:
 
 | engine | host | 15 B ns | 16 B ns | 17 B ns | 4 KiB ns |
 |---|---|---:|---:|---:|---:|
-| pure JS | C8a | 58.3 | 92.7 | 94.5 | 4,198.6 |
-| hybrid | C8a | 58.5 | 51.0 | 51.2 | 591.5 |
-| pure JS | C8g | 145.0 | 188.4 | 198.3 | 16,494.9 |
-| hybrid | C8g | 145.0 | 80.1 | 80.4 | 908.2 |
+| pure JS | C8a | 61.5 | 71.5 | 79.5 | 2,449.5 |
+| hybrid | C8a | 62.5 | 49.8 | 50.4 | 592.4 |
+| pure JS | C8g | 108.5 | 127.9 | 140.1 | 3,768.0 |
+| hybrid | C8g | 108.7 | 79.3 | 80.8 | 899.6 |
 
-The pure-JavaScript one-shot bulk path is particularly sensitive to V8's
-backend: it reached 1,062 MB/s on C8a but 251 MB/s on C8g. The measurements
-were stable rather than transient—the C8g 1 MiB case had a 0.1% p10-to-p90
-time spread. The separately optimized streaming block loop is faster on both
-hosts, making reuse of that loop an obvious AArch64 tuning target.
+Reusing the compact streaming block loop for one-shot inputs removed the V8
+backend cliff. Pure-JavaScript 1 MiB throughput rose from 1,062 to 1,848 MB/s
+on C8a and from 251 to 1,160 MB/s on C8g. A separate compact 9–15-byte path
+also prevents bulk-kernel changes from perturbing V8's shortest nontrivial
+path.
 
 ### Streaming 1 MiB byte input
 
@@ -85,9 +108,9 @@ materializes the final digest.
 
 | algorithm | chunk | C8a MB/s | C8g MB/s |
 |---|---:|---:|---:|
-| haya32x64 pure JS | 64 B | 546 | 292 |
-| haya32x64 pure JS | 4 KiB | 1,487 | 955 |
-| haya32x64 pure JS | 64 KiB | 1,568 | 1,018 |
+| haya32x64 pure JS | 64 B | 551 | 295 |
+| haya32x64 pure JS | 4 KiB | 1,666 | 1,027 |
+| haya32x64 pure JS | 64 KiB | 1,819 | 1,113 |
 | xxhash-wasm XXH64 | 64 B | 1,115 | 631 |
 | xxhash-wasm XXH64 | 4 KiB | 13,881 | 8,579 |
 | xxhash-wasm XXH64 | 64 KiB | 16,726 | 11,137 |
@@ -99,8 +122,8 @@ materializes the final digest.
 
 | algorithm | bits | C8a 8 chars ns | C8a 32 chars ns | C8g 8 chars ns | C8g 32 chars ns |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 pure JS | 64 | 280.4 | 420.3 | 479.2 | 768.1 |
-| haya32x64 hybrid | 64 | 277.2 | 321.6 | 486.2 | 612.0 |
+| haya32x64 pure JS | 64 | 269.1 | 362.3 | 486.0 | 653.2 |
+| haya32x64 hybrid | 64 | 271.6 | 325.0 | 506.2 | 618.9 |
 | hayahash64 BigInt | 64 | 830.9 | 1,238.0 | 1,229.5 | 1,788.8 |
 | hayahash64 wasm | 64 | 290.3 | 306.7 | 585.0 | 618.9 |
 | xxhash-wasm XXH64 | 64 | 59.5 | 71.8 | 96.6 | 119.8 |
@@ -124,7 +147,7 @@ arithmetic and architecture-specific acceleration can achieve on these
 
 | algorithm | bits | C8a cycles 1–31 B | C8a B/cycle | C8g cycles 1–31 B | C8g B/cycle |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 | 64 | 19.22 | 3.29 | 34.58 | 2.60 |
+| haya32x64 | 64 | 19.06 | 3.50 | 34.56 | 2.74 |
 | khashv-64 | 64 | 46.10 | 2.78 | 105.47 | 1.60 |
 | lookup3 | 64 | 12.12 | 1.49 | 35.23 | 0.86 |
 | MurmurHash2-64.int32 | 64 | 16.39 | 3.32 | 32.14 | 2.67 |
@@ -144,18 +167,33 @@ separate JavaScript harness exists for those lanes. A speed row is also not a
 quality endorsement: digest widths differ, and not every comparator passes
 SMHasher3's statistical suite.
 
+Within the close 32-bit-core set, optimized `haya32x64` has the highest bulk
+throughput on both hosts: 5.4% above `MurmurHash2-64.int32` on C8a and 2.6%
+above it on C8g. MurmurHash2 and lookup3 are useful speed references, not
+full-quality peers: the pinned upstream raw reports pass 42/250 and 116/238
+respectively, versus 250/250 for `khashv-64`. Against that passing but much
+slower comparator, haya32x64 is 2.4x/3.1x faster for 1–31-byte keys and
+1.26x/1.71x faster in bulk on C8a/C8g. Short-key latency still trails
+MurmurHash2 by 16% on C8a and 8% on C8g; seed premixing and the wider
+finalizer account for that quality cost.
+
 ## Reproduction and raw data
 
 The harness, pinned npm dependencies, comparator rationale, and commands are
-in [`bench/`](../bench/README.md). Machine-readable JavaScript results include
-p10, median, and p90 for all 118 cases:
+in [`bench/`](../bench/README.md). The original full-matrix artifacts retain
+all comparator rows; focused optimized artifacts contain every haya32x64 case
+and record `dirty: true` plus the base revision:
 
 - [C8a Node.js results](../bench/results/c8a-node24.json)
 - [C8g Node.js results](../bench/results/c8g-node24.json)
 - [C8a SMHasher3 output](../bench/results/c8a-smhasher3.txt)
 - [C8g SMHasher3 output](../bench/results/c8g-smhasher3.txt)
+- [C8a optimized Node.js results](../bench/results/c8a-node24-optimized.json)
+- [C8g optimized Node.js results](../bench/results/c8g-node24-optimized.json)
+- [C8a optimized SMHasher3 output](../bench/results/c8a-smhasher3-optimized.txt)
+- [C8g optimized SMHasher3 output](../bench/results/c8g-smhasher3-optimized.txt)
 
-Across all JavaScript cases, the largest p10-to-p90 time spread was 4.9% on
-C8a and 10.0% on C8g. This snapshot still has only one instance of each type,
-one Node/V8 version, and one compiler. Repeat it on at least three fresh
-instances before treating small differences as durable.
+Across the focused optimized JavaScript cases, the largest p10-to-p90 time
+spread was 3.3% on C8a and 8.2% on C8g. This snapshot still has only one
+instance of each type, one Node/V8 version, and one compiler. Repeat it on at
+least three fresh instances before treating small differences as durable.

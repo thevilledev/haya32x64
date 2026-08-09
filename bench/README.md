@@ -26,9 +26,17 @@ HAYA_BENCH_SAMPLE_MS=300 HAYA_BENCH_SAMPLES=15 \
   npm run bench --prefix bench > result.json
 ```
 
+For focused optimization runs, select algorithms by name substring:
+
+```sh
+HAYA_BENCH_FILTER=haya32x64 npm run bench --prefix bench > haya.json
+```
+
 All inputs are allocated before timing. The benchmark consumes every digest
 through its public representation, so numbers include package dispatch,
 output handling, UTF-8 conversion for string APIs, and JS/wasm copies.
+Artifacts record both the base revision and whether the measured worktree was
+dirty, preventing optimization runs from being mistaken for that base commit.
 
 The comparison set contains the package's pure and hybrid engines,
 `hayahash`'s BigInt and wasm engines, the native-wasm and pure-JavaScript
@@ -55,6 +63,9 @@ make -C tests/smhasher3 \
   EXTRA_CXXFLAGS='-O3 -march=native -DNDEBUG -include cstdlib' build
 HAYA_BENCH_CPU=2 ./bench/native.sh > native.txt
 ```
+
+Set `HAYA_BENCH_FILTER=haya32x64` to run only matching entries while tuning.
+An unset or empty filter runs the full comparator matrix.
 
 SMHasher3 reports cycles per hash for every length from 1 through 31 bytes and
 bytes per cycle for a 256 KiB bulk key. The script includes close 32-bit-core

@@ -71,6 +71,38 @@ function final4(h0, h1, h2, h3, s0, s1, carry, length) {
 	return [x >>> 0, y >>> 0];
 }
 
+// Keep the no-stripe 9..15-byte path separate from the much larger block
+// engine. V8 otherwise changes its tiering and register allocation for this
+// path when the bulk loop evolves, despite the bulk branch never being taken.
+function hash9to15(bytes, s0, s1, length) {
+	const view = new DataView(
+		bytes.buffer,
+		bytes.byteOffset,
+		bytes.byteLength,
+	);
+	let h0 = s0 ^ KA;
+	let h1 = (rotl(s1, 7) + KB) | 0;
+	let h2 = rotl(s0, 14) ^ KC;
+	let h3 = (rotl(s1, 21) + KD) | 0;
+	h0 = Math.imul(
+		(h0 + inja(view.getUint32(0, true) | 0)) | 0,
+		KA,
+	);
+	h1 = Math.imul(
+		(h1 + inja(view.getUint32(4, true) | 0)) | 0,
+		KB,
+	);
+	h2 = Math.imul(
+		(h2 + injb(view.getUint32(length - 8, true) | 0)) | 0,
+		KC,
+	);
+	h3 = Math.imul(
+		(h3 + injb(view.getUint32(length - 4, true) | 0)) | 0,
+		KD,
+	);
+	return final4(h0, h1, h2, h3, s0, s1, 0, length);
+}
+
 /**
  * Hashes bytes using the pure-JavaScript engine.
  * @param {Uint8Array} bytes
@@ -116,6 +148,9 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 			s0, s1, 0, total,
 		);
 	}
+	if (remaining < 16) {
+		return hash9to15(bytes, s0, s1, total);
+	}
 
 	const view = new DataView(
 		bytes.buffer,
@@ -126,61 +161,36 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 	let h1 = (rotl(s1, 7) + KB) | 0;
 	let h2 = rotl(s0, 14) ^ KC;
 	let h3 = (rotl(s1, 21) + KD) | 0;
-	let word = 0;
 	let previous = 0;
 	let carry = 0;
 	let laneInput = 0;
 
 	if (remaining >= 128) {
-		let h4 = (s1 + KE) | 0;
-		let h5 = rotl(s0, 9) ^ KD;
-		let h6 = (rotl(s1, 18) + KA) | 0;
-		let h7 = rotl(s0, 27) ^ KB;
-		do {
-			word = view.getUint32(offset, true) | 0;
-			laneInput = h0 ^ ((word + rotl(previous, 11)) | 0);
-			h0 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 4, true) | 0;
-			laneInput = h1 ^ ((word + rotl(previous, 11)) | 0);
-			h1 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 8, true) | 0;
-			laneInput = h2 ^ ((word + rotl(previous, 11)) | 0);
-			h2 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 12, true) | 0;
-			laneInput = h3 ^ ((word + rotl(previous, 11)) | 0);
-			h3 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 16, true) | 0;
-			laneInput = h4 ^ ((word + rotl(previous, 11)) | 0);
-			h4 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 20, true) | 0;
-			laneInput = h5 ^ ((word + rotl(previous, 11)) | 0);
-			h5 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 24, true) | 0;
-			laneInput = h6 ^ ((word + rotl(previous, 11)) | 0);
-			h6 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			word = view.getUint32(offset + 28, true) | 0;
-			laneInput = h7 ^ ((word + rotl(previous, 11)) | 0);
-			h7 = Math.imul(laneInput, KA);
-			carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-			previous = word;
-			h0 = (h0 + previous) | 0;
-			offset += 32;
-			remaining -= 32;
-		} while (remaining >= 32);
+		const bulk = {
+			h: [
+				h0,
+				h1,
+				h2,
+				h3,
+				(s1 + KE) | 0,
+				rotl(s0, 9) ^ KD,
+				(rotl(s1, 18) + KA) | 0,
+				rotl(s0, 27) ^ KB,
+			],
+			previous,
+			carry,
+		};
+		const blocks = Math.floor(remaining / 32) * 32;
+		streamBlocks(bulk, bytes, offset, blocks);
+		[h0, h1, h2, h3] = bulk.h;
+		const h4 = bulk.h[4];
+		const h5 = bulk.h[5];
+		const h6 = bulk.h[6];
+		const h7 = bulk.h[7];
+		previous = bulk.previous;
+		carry = bulk.carry;
+		offset += blocks;
+		remaining -= blocks;
 
 		h0 = Math.imul(h0 ^ rotl(h4, 11), KA) ^ carry;
 		h1 = Math.imul(h1 ^ rotl(h5, 19), KB);
@@ -189,26 +199,25 @@ export function hashPure(bytes, seedLo = 0, seedHi = 0) {
 	}
 
 	while (remaining >= 16) {
-		word = view.getUint32(offset, true) | 0;
-		laneInput = h0 ^ ((word + rotl(previous, 11)) | 0);
-		h0 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 4, true) | 0;
-		laneInput = h1 ^ ((word + rotl(previous, 11)) | 0);
-		h1 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 8, true) | 0;
-		laneInput = h2 ^ ((word + rotl(previous, 11)) | 0);
-		h2 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 12, true) | 0;
-		laneInput = h3 ^ ((word + rotl(previous, 11)) | 0);
-		h3 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
+		const w0 = view.getUint32(offset, true) | 0;
+		const w1 = view.getUint32(offset + 4, true) | 0;
+		const w2 = view.getUint32(offset + 8, true) | 0;
+		const w3 = view.getUint32(offset + 12, true) | 0;
+		const lane0 = h0 ^ ((w0 + rotl(previous, 11)) | 0);
+		const lane1 = h1 ^ ((w1 + rotl(w0, 11)) | 0);
+		const lane2 = h2 ^ ((w2 + rotl(w1, 11)) | 0);
+		const lane3 = h3 ^ ((w3 + rotl(w2, 11)) | 0);
+		const high0 = mulhiKA(lane0);
+		const high1 = mulhiKA(lane1);
+		const high2 = mulhiKA(lane2);
+		const high3 = mulhiKA(lane3);
+		h0 = Math.imul(lane0, KA);
+		h1 = Math.imul(lane1, KA);
+		h2 = Math.imul(lane2, KA);
+		h3 = Math.imul(lane3, KA);
+		carry = rotl(carry, 20) ^ rotl(high0, 15) ^
+			rotl(high1, 10) ^ rotl(high2, 5) ^ high3;
+		previous = w3;
 		offset += 16;
 		remaining -= 16;
 	}
@@ -251,49 +260,45 @@ function streamBlocks(state, bytes, offset, length) {
 	let previous = state.previous;
 	let carry = state.carry;
 	const end = offset + length;
-	let word;
-	let laneInput;
 	while (offset !== end) {
-		word = view.getUint32(offset, true) | 0;
-		laneInput = h0 ^ ((word + rotl(previous, 11)) | 0);
-		h0 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 4, true) | 0;
-		laneInput = h1 ^ ((word + rotl(previous, 11)) | 0);
-		h1 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 8, true) | 0;
-		laneInput = h2 ^ ((word + rotl(previous, 11)) | 0);
-		h2 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 12, true) | 0;
-		laneInput = h3 ^ ((word + rotl(previous, 11)) | 0);
-		h3 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 16, true) | 0;
-		laneInput = h4 ^ ((word + rotl(previous, 11)) | 0);
-		h4 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 20, true) | 0;
-		laneInput = h5 ^ ((word + rotl(previous, 11)) | 0);
-		h5 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 24, true) | 0;
-		laneInput = h6 ^ ((word + rotl(previous, 11)) | 0);
-		h6 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
-		word = view.getUint32(offset + 28, true) | 0;
-		laneInput = h7 ^ ((word + rotl(previous, 11)) | 0);
-		h7 = Math.imul(laneInput, KA);
-		carry = rotl(carry, 5) ^ mulhiKA(laneInput);
-		previous = word;
+		const w0 = view.getUint32(offset, true) | 0;
+		const w1 = view.getUint32(offset + 4, true) | 0;
+		const w2 = view.getUint32(offset + 8, true) | 0;
+		const w3 = view.getUint32(offset + 12, true) | 0;
+		const lane0 = h0 ^ ((w0 + rotl(previous, 11)) | 0);
+		const lane1 = h1 ^ ((w1 + rotl(w0, 11)) | 0);
+		const lane2 = h2 ^ ((w2 + rotl(w1, 11)) | 0);
+		const lane3 = h3 ^ ((w3 + rotl(w2, 11)) | 0);
+		const high0 = mulhiKA(lane0);
+		const high1 = mulhiKA(lane1);
+		const high2 = mulhiKA(lane2);
+		const high3 = mulhiKA(lane3);
+		h0 = Math.imul(lane0, KA);
+		h1 = Math.imul(lane1, KA);
+		h2 = Math.imul(lane2, KA);
+		h3 = Math.imul(lane3, KA);
+		carry = rotl(carry, 20) ^ rotl(high0, 15) ^
+			rotl(high1, 10) ^ rotl(high2, 5) ^ high3;
+
+		const w4 = view.getUint32(offset + 16, true) | 0;
+		const w5 = view.getUint32(offset + 20, true) | 0;
+		const w6 = view.getUint32(offset + 24, true) | 0;
+		const w7 = view.getUint32(offset + 28, true) | 0;
+		const lane4 = h4 ^ ((w4 + rotl(w3, 11)) | 0);
+		const lane5 = h5 ^ ((w5 + rotl(w4, 11)) | 0);
+		const lane6 = h6 ^ ((w6 + rotl(w5, 11)) | 0);
+		const lane7 = h7 ^ ((w7 + rotl(w6, 11)) | 0);
+		const high4 = mulhiKA(lane4);
+		const high5 = mulhiKA(lane5);
+		const high6 = mulhiKA(lane6);
+		const high7 = mulhiKA(lane7);
+		h4 = Math.imul(lane4, KA);
+		h5 = Math.imul(lane5, KA);
+		h6 = Math.imul(lane6, KA);
+		h7 = Math.imul(lane7, KA);
+		carry = rotl(carry, 20) ^ rotl(high4, 15) ^
+			rotl(high5, 10) ^ rotl(high6, 5) ^ high7;
+		previous = w7;
 		h0 = (h0 + previous) | 0;
 		offset += 32;
 	}

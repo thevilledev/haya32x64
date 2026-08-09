@@ -118,24 +118,25 @@ nine warmed public-API samples; MB/s is decimal.
 
 | byte API | bits | C8a 4 B | C8g 4 B | C8a 1 MiB | C8g 1 MiB |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 pure JS | 64 | **23.1 ns** | **34.5 ns** | 1,062 MB/s | 251 MB/s |
-| haya32x64 hybrid | 64 | **23.1 ns** | **34.9 ns** | 6,921 MB/s | 4,785 MB/s |
+| haya32x64 pure JS | 64 | **22.2 ns** | **34.1 ns** | **1,848 MB/s** | **1,160 MB/s** |
+| haya32x64 hybrid | 64 | **23.3 ns** | **34.4 ns** | 6,884 MB/s | 4,765 MB/s |
 | hayahash64 BigInt | 64 | 496.6 ns | 701.8 ns | 83 MB/s | 67 MB/s |
 | hayahash64 wasm | 64 | 48.1 ns | 80.4 ns | 16,210 MB/s | 11,431 MB/s |
 | xxhash-wasm XXH64 | 64 | 39.4 ns | 63.8 ns | 16,092 MB/s | 11,067 MB/s |
 | cyrb53 bytes | 53 | 3.8 ns | 6.0 ns | 1,116 MB/s | 778 MB/s |
 
-The pure-JavaScript streaming engine reached 1,568 MB/s on C8a and 1,018
-MB/s on C8g with 64 KiB chunks. Its much lower C8g one-shot bulk result was
-repeatable in this run and points to an architecture-specific V8 code-path
-tuning opportunity rather than transient measurement noise.
+The pure-JavaScript engine now reuses one compact block kernel for one-shot
+and streaming inputs. At 1 MiB that raised one-shot throughput by 74% on C8a
+and 4.6x on C8g without changing the digest. Streaming with 64 KiB chunks
+reached 1,819 MB/s and 1,113 MB/s respectively.
 
 Native SMHasher3 speed tests, built with GCC 15.2 and `-O3 -march=native`,
-measured `haya32x64` at 19.22 cycles/hash for 1–31-byte keys and 3.29
-bytes/cycle in bulk on C8a; C8g measured 34.58 cycles/hash and 2.60
-bytes/cycle. Modern hashes using native 64-bit arithmetic remain much faster
-in bulk, as expected; `haya32x64` is for environments where that arithmetic
-is unavailable or expensive.
+measured `haya32x64` at 19.06 cycles/hash for 1–31-byte keys and 3.50
+bytes/cycle in bulk on C8a; C8g measured 34.56 cycles/hash and 2.74
+bytes/cycle. This is the highest bulk throughput in the report's close
+64-bit-output, 32-bit-core comparison set on both hosts. Modern hashes using
+native 64-bit arithmetic remain much faster, as expected; `haya32x64` is for
+environments where that arithmetic is unavailable or expensive.
 
 See [performance and cross-architecture validation](docs/benchmarks.md) for
 expanded native, JavaScript, string, and streaming tables, methodology,

@@ -27,6 +27,13 @@ words into a serial accumulator kept off the lane-critical path. A raw final
 stripe is also added to lane zero once per 32-byte block; that checkpoint
 breaks difference ladders that follow the rotation orbit around the lanes.
 
+The serial definition can be reassociated without changing any bit. Four
+steps are equivalent to rotating the old carry by 20 and xoring the four high
+words rotated by 15, 10, 5, and 0. The implementation uses that grouped form
+on x86, a lower-pressure two-product form in the AArch64 bulk loop, and the
+literal serial form on conservative targets. These are instruction-scheduling
+choices, not different hash definitions.
+
 ## Length paths and tails
 
 The four-lane mid path is used only below 128 bytes and for the final bulk

@@ -16,6 +16,7 @@ import {
 const SAMPLE_MS = numberFromEnvironment("HAYA_BENCH_SAMPLE_MS", 150);
 const SAMPLE_COUNT = numberFromEnvironment("HAYA_BENCH_SAMPLES", 9);
 const WARMUP_MS = numberFromEnvironment("HAYA_BENCH_WARMUP_MS", 100);
+const ALGORITHM_FILTER = process.env.HAYA_BENCH_FILTER;
 const BYTE_LENGTHS = [1, 4, 8, 15, 16, 17, 32, 64, 256, 4096, 1048576];
 const STRING_LENGTHS = [8, 32, 256, 4096];
 const STREAM_LENGTH = 1048576;
@@ -163,6 +164,18 @@ function repositoryRevision() {
 	}
 }
 
+function repositoryDirty() {
+	try {
+		return execFileSync("git", ["status", "--porcelain", "--untracked-files=no"], {
+			cwd: new URL("..", import.meta.url),
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+		}).trim() !== "";
+	} catch {
+		return null;
+	}
+}
+
 function splitBytes(bytes, chunkSize) {
 	const chunks = [];
 	for (let offset = 0; offset < bytes.length; offset += chunkSize) {
@@ -172,6 +185,10 @@ function splitBytes(bytes, chunkSize) {
 }
 
 function record(results, suite, algorithm, width, length, operation, extra = {}) {
+	if (ALGORITHM_FILTER !== undefined &&
+		!algorithm.includes(ALGORITHM_FILTER)) {
+		return;
+	}
 	if (globalThis.gc !== undefined) {
 		globalThis.gc();
 	}
@@ -258,6 +275,7 @@ const output = {
 	schema: 1,
 	createdAt: new Date().toISOString(),
 	revision: repositoryRevision(),
+	dirty: repositoryDirty(),
 	platform: {
 		arch: process.arch,
 		platform: process.platform,
@@ -271,6 +289,7 @@ const output = {
 		sampleMs: SAMPLE_MS,
 		samples: SAMPLE_COUNT,
 		warmupMs: WARMUP_MS,
+		algorithmFilter: ALGORITHM_FILTER ?? null,
 		byteLengths: BYTE_LENGTHS,
 		stringLengths: STRING_LENGTHS,
 		streamLength: STREAM_LENGTH,

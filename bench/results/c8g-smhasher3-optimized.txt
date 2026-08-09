@@ -1,0 +1,72 @@
+=== benchmark metadata ===
+utc=2026-08-09T06:54:55Z
+Linux ip-172-31-39-60 7.0.0-1010-aws #10-Ubuntu SMP PREEMPT Thu Jul 23 01:53:33 UTC 2026 aarch64 GNU/Linux
+cc (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+SMHasher3 20260804-main-51d3cd1a-dirty
+revision=a98c011de2e36ba272bdbbf8c7891f64a734295a
+dirty=true
+pinned_cpu=2
+
+=== haya32x64 ===
+--- Testing haya32x64 "64-bit digest from 32-bit ops only (32x32->64 multiplies)"
+
+[[[ Speed Tests ]]]
+
+Small key speed test - [1, 31]-byte keys
+   1-byte keys -    33.35 cycles/hash
+   2-byte keys -    37.69 cycles/hash
+   3-byte keys -    37.71 cycles/hash
+   4-byte keys -    30.92 cycles/hash
+   5-byte keys -    35.33 cycles/hash
+   6-byte keys -    35.36 cycles/hash
+   7-byte keys -    35.37 cycles/hash
+   8-byte keys -    29.97 cycles/hash
+   9-byte keys -    35.33 cycles/hash
+  10-byte keys -    35.34 cycles/hash
+  11-byte keys -    35.34 cycles/hash
+  12-byte keys -    30.47 cycles/hash
+  13-byte keys -    30.55 cycles/hash
+  14-byte keys -    30.48 cycles/hash
+  15-byte keys -    30.48 cycles/hash
+  16-byte keys -    34.56 cycles/hash
+  17-byte keys -    35.08 cycles/hash
+  18-byte keys -    35.08 cycles/hash
+  19-byte keys -    35.21 cycles/hash
+  20-byte keys -    35.08 cycles/hash
+  21-byte keys -    35.24 cycles/hash
+  22-byte keys -    35.07 cycles/hash
+  23-byte keys -    35.07 cycles/hash
+  24-byte keys -    35.08 cycles/hash
+  25-byte keys -    36.04 cycles/hash
+  26-byte keys -    35.93 cycles/hash
+  27-byte keys -    35.99 cycles/hash
+  28-byte keys -    36.04 cycles/hash
+  29-byte keys -    36.02 cycles/hash
+  30-byte keys -    36.04 cycles/hash
+  31-byte keys -    36.02 cycles/hash
+Average        -    34.56 cycles/hash
+ rnd-byte keys -    34.68 cycles/hash
+
+Bulk speed test - 262144-byte keys
+Alignment   7 -  2.75 bytes/cycle -  8.96 GiB/sec @ 3.5 ghz
+Alignment   6 -  2.75 bytes/cycle -  8.96 GiB/sec @ 3.5 ghz
+Alignment   5 -  2.74 bytes/cycle -  8.93 GiB/sec @ 3.5 ghz
+Alignment   4 -  2.74 bytes/cycle -  8.94 GiB/sec @ 3.5 ghz
+Alignment   3 -  2.73 bytes/cycle -  8.91 GiB/sec @ 3.5 ghz
+Alignment   2 -  2.73 bytes/cycle -  8.91 GiB/sec @ 3.5 ghz
+Alignment   1 -  2.73 bytes/cycle -  8.91 GiB/sec @ 3.5 ghz
+Alignment   0 -  2.73 bytes/cycle -  8.91 GiB/sec @ 3.5 ghz
+Average       -  2.74 bytes/cycle -  8.93 GiB/sec @ 3.5 ghz
+Alignment rnd -  2.73 bytes/cycle -  8.91 GiB/sec @ 3.5 ghz
+
+Bulk speed test - [262017, 262144]-byte keys
+Alignment   7 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   6 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   5 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   4 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   3 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   2 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   1 -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment   0 -  2.73 bytes/cycle -  8.90 GiB/sec @ 3.5 ghz
+Average       -  2.73 bytes/cycle -  8.89 GiB/sec @ 3.5 ghz
+Alignment rnd -  2.72 bytes/cycle -  8.88 GiB/sec @ 3.5 ghz
