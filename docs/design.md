@@ -3,10 +3,53 @@
 The reference header is the algorithm specification. This page gives the
 short version of why the structure looks unusual for a 32-bit hash.
 
-## Data path
+## Bulk data path
 
-Inputs of at least 128 bytes use eight `uint32_t` lanes over 32-byte blocks.
-Each stripe is absorbed as
+Inputs of at least 128 bytes use four pair-lanes over 32-byte blocks. Pair
+`i` is the lane pair `(a, b) = (h[i], h[i+4])`, and each eight-byte stripe
+enters one complete 32×32 multiply:
+
+```text
+u0 = w0 xor k0            u1 = w1 xor k1
+m  = (u0 + a) * (u1 + b)
+a  = low32(m) + rotl32(u1, 16)
+b  = high32(m) xor u0
+```
+
+The per-pair key words `k0, k1` are the odd diffusion constants; each pair
+uses a distinct overlapping constant pair. One multiply absorbs eight bytes,
+which is what doubles bulk throughput over the previous one-multiply-per-word
+kernel: multiplier ports were never the limit, total instruction count was.
+
+Three details carry the quality argument:
+
+- Both multiplier operands mix evolving, seed-derived state into the input.
+  Steering an operand to zero requires knowing the lane state, and even a
+  zeroed product still deposits both invertibly keyed words through the
+  feedback, so no stripe is ever silently dropped. With all-zero input the
+  operands become `k + state`, so the all-zero state is not a fixed point,
+  and chaining the state through the product keeps block order significant,
+  unlike purely additive accumulation.
+- The half rotation on the raw feedback is load-bearing. With an unrotated
+  `low32(m) + u1`, a difference of `2^b` in `w1` contributes
+  `((u0 + a + 1) << b)` to the new `a`, which vanishes deterministically for
+  half of all states at `b = 31`. SMHasher3's long-key Sparse, OneByte, and
+  Long keysets found exactly that cancellation in an earlier candidate; the
+  rotation separates the product difference from the raw difference at every
+  bit position and costs nothing on the multiply's critical path.
+- Pairs are otherwise independent, so the eight-to-four fold combines lane
+  `a_i` with the neighbouring pair's `b_{(i+1) mod 4}`. A difference confined
+  to one pair therefore reaches two folded words, each a bijection of its
+  lane input, and those two words enter the two different finalizer products.
+  An earlier candidate that folded each pair onto itself funneled
+  pair-confined differences through one 32-bit word; SMHasher3 collided it at
+  the expected 2^-32 rate, reproduced locally by a dedicated regression
+  program before the rewire.
+
+## Mid path, length paths, and tails
+
+Below 128 bytes and for the bulk remainder, four lanes absorb 16-byte
+stripes as
 
 ```text
 t = word + rotl32(previous_word, 11)
@@ -19,27 +62,15 @@ Because `KA` is odd, the low-product lane update is a permutation for fixed
 `t`. At the first position where two inputs differ, `previous_word` is still
 equal, so `t` differs; the chained absorb sequence is injective by induction.
 This is a statement about the absorb map, not a collision-resistance proof for
-the complete hash.
+the complete hash. The serial carry definition can be reassociated without
+changing any bit; the implementation uses a four-product grouped form on x86
+and the literal serial form elsewhere.
 
-Ordinary 32-bit hashes discard the high half of each product, even though that
-is the half that diffuses high input bits downward. haya32x64 folds those high
-words into a serial accumulator kept off the lane-critical path. A raw final
-stripe is also added to lane zero once per 32-byte block; that checkpoint
-breaks difference ladders that follow the rotation orbit around the lanes.
-
-The serial definition can be reassociated without changing any bit. Four
-steps are equivalent to rotating the old carry by 20 and xoring the four high
-words rotated by 15, 10, 5, and 0. The implementation uses that grouped form
-on x86, a lower-pressure two-product form in the AArch64 bulk loop, and the
-literal serial form on conservative targets. These are instruction-scheduling
-choices, not different hash definitions.
-
-## Length paths and tails
-
-The four-lane mid path is used only below 128 bytes and for the final bulk
-remainder. It therefore sees fewer than the 32 stripes in the orbit of a
-32-bit rotate by 11. The boundary is part of the digest definition, not a
-tuning parameter.
+The mid path sees fewer than the 32 stripes in the orbit of a 32-bit rotate
+by 11. The 128-byte boundary is part of the digest definition, not a tuning
+parameter. The bulk loop hands its final raw word to the mid path through
+`previous`, so remainder stripes chain onto the bulk exactly as they chain
+onto each other.
 
 Tails use overlapping complete little-endian word loads. The two tail words
 go through distinct bijective three-rotation maps:

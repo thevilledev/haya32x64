@@ -70,7 +70,7 @@ for (const [name, hash] of [
 			view.setUint32(i * 8 + 4, digest[1], true);
 			verificationKey[i] = i;
 		}
-		assert.equal(hash(hashes)[0], 0xeaa8e435);
+		assert.equal(hash(hashes)[0], 0xa860ab01);
 	});
 }
 

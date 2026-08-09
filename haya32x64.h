@@ -8,18 +8,27 @@
 //
 // Four structural choices define the hash:
 //
-//  1. Eight independent lanes absorb 32-byte blocks.  A stripe enters as
-//       t = w + rotl32(w_previous, 11).
-//     At the first differing stripe w_previous is still equal, so the absorb
-//     sequence is injective by induction.  The rotated copy also moves high
-//     input differences downward before the next multiply.
-//  2. The low product word updates the lane bijectively (the multiplier is
-//     odd); the high word, normally discarded by 32-bit hashes, enters a
-//     serial carry accumulator.  A raw-word checkpoint once per block breaks
-//     rotation-orbit difference ladders.
-//  3. The four-lane path is bounded below 128 bytes, fewer than the 32-stripe
-//     orbit of rotl-11.  Tails use overlapping little-endian word reads and
-//     two distinct bijective three-rotation injections.
+//  1. Inputs of 128 bytes and above use four pair-lanes over 32-byte blocks.
+//     Each eight-byte stripe is keyed word-wise and enters one complete
+//     multiply whose operands both carry seeded, evolving lane state:
+//       u0 = w0 ^ k0            u1 = w1 ^ k1
+//       m  = (u0 + a) * (u1 + b)
+//       a  = lo(m) + rotl32(u1, 16)
+//       b  = hi(m) ^ u0
+//     Operand blinding therefore requires knowing the lane state, which is
+//     seed-derived and input-evolved, and a degenerate product still deposits
+//     both invertibly keyed words into the pair.  With all-zero input the
+//     keyed words become the odd constants, so the all-zero lane state is
+//     not a fixed point.  Chaining the state through the product keeps
+//     block order significant, unlike purely additive accumulation.
+//  2. Below 128 bytes and for the bulk remainder, four lanes absorb 16-byte
+//     stripes as t = w + rotl32(w_previous, 11); at the first differing
+//     stripe w_previous is still equal, so this absorb sequence is injective
+//     by induction.  The low product word updates the lane bijectively (the
+//     multiplier is odd); the high word enters a serial carry accumulator.
+//     This path sees fewer than the 32 stripes in the rotl-11 orbit.
+//  3. Tails use overlapping little-endian word reads and two distinct
+//     bijective three-rotation injections.
 //  4. Two Feistel rounds make the seed premix a bijection of all 64 seed bits.
 //     Length enters only in the finalizer, through both variable wide products,
 //     so unknown-length streaming is one-shot-identical without reintroducing
@@ -134,8 +143,8 @@ haya32x64_internal_seed(uint32_t seed_lo, uint32_t seed_hi,
 
 // The grouped form exposes four independent products to superscalar CPUs.
 // Folding their high halves is algebraically identical to four serial
-// `carry = rotl(carry, 5) ^ high` steps.  x86 benefits from exposing all four
-// products; AArch64 performs best with the lower-pressure paired form below.
+// `carry = rotl(carry, 5) ^ high` steps.  x86 schedules the grouped form
+// best; AArch64 fuses the serial rotate-xor chain into shifted operands.
 #define HAYA32X64_INTERNAL_LANES4_GROUPED(h0, h1, h2, h3, \
 					  t0, t1, t2, t3, carry) \
 	do { \
@@ -183,39 +192,27 @@ haya32x64_internal_seed(uint32_t seed_lo, uint32_t seed_hi,
 			haya32x64_p_.hi; \
 	} while (0)
 
-// Pairing is the AArch64 bulk sweet spot: it shortens the carry chain without
-// the register pressure of keeping four complete products live at once.
-#define HAYA32X64_INTERNAL_LANES4_PAIRED(h0, h1, h2, h3, \
-					 t0, t1, t2, t3, carry) \
+// Bulk pair-lane absorb: one complete 32x32 product covers eight input
+// bytes.  The keyed words are computed once and reused by the multiplier
+// operands and the feedback, which keeps the constants off the serial
+// dependency chain and avoids extra register copies on two-operand ISAs.
+// The half-rotated raw feedback is load-bearing: with an unrotated
+// `lo + u1`, a difference of 2^b in w1 contributes ((operand+1) << b) to
+// the new a-lane, which vanishes deterministically for half of all states
+// at b = 31.  SMHasher3's Sparse/OneByte/Long keysets found exactly that
+// cancellation.  Rotating the raw copy by 16 separates the product
+// difference from the raw difference at every bit position; the rotate is
+// off the multiply chain because it depends only on the loaded word.
+#define HAYA32X64_INTERNAL_PAIR(a, b, w0, w1, k0, k1) \
 	do { \
-		haya32x64_words haya32x64_p0_ = haya32x64_internal_mul( \
-			(h0) ^ (t0), HAYA32X64_INTERNAL_KA); \
-		haya32x64_words haya32x64_p1_ = haya32x64_internal_mul( \
-			(h1) ^ (t1), HAYA32X64_INTERNAL_KA); \
-		(h0) = haya32x64_p0_.lo; \
-		(h1) = haya32x64_p1_.lo; \
-		(carry) = haya32x64_internal_rotl((carry), 10) ^ \
-			haya32x64_internal_rotl(haya32x64_p0_.hi, 5) ^ \
-			haya32x64_p1_.hi; \
-		haya32x64_p0_ = haya32x64_internal_mul( \
-			(h2) ^ (t2), HAYA32X64_INTERNAL_KA); \
-		haya32x64_p1_ = haya32x64_internal_mul( \
-			(h3) ^ (t3), HAYA32X64_INTERNAL_KA); \
-		(h2) = haya32x64_p0_.lo; \
-		(h3) = haya32x64_p1_.lo; \
-		(carry) = haya32x64_internal_rotl((carry), 10) ^ \
-			haya32x64_internal_rotl(haya32x64_p0_.hi, 5) ^ \
-			haya32x64_p1_.hi; \
+		uint32_t haya32x64_u0_ = (w0) ^ (k0); \
+		uint32_t haya32x64_u1_ = (w1) ^ (k1); \
+		haya32x64_words haya32x64_m_ = haya32x64_internal_mul( \
+			haya32x64_u0_ + (a), haya32x64_u1_ + (b)); \
+		(a) = haya32x64_m_.lo + \
+		      haya32x64_internal_rotl(haya32x64_u1_, 16); \
+		(b) = haya32x64_m_.hi ^ haya32x64_u0_; \
 	} while (0)
-
-#if defined(__aarch64__)
-#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_PAIRED
-#elif !defined(__x86_64__) && !defined(_M_X64) && \
-      !defined(__i386__) && !defined(_M_IX86)
-#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_SERIAL
-#else
-#define HAYA32X64_INTERNAL_LANES4_BULK HAYA32X64_INTERNAL_LANES4_GROUPED
-#endif
 
 #if defined(__x86_64__) || defined(_M_X64) || \
     defined(__i386__) || defined(_M_IX86)
@@ -256,36 +253,36 @@ haya32x64_internal_bulk(haya32x64_internal_bulk_state *state,
 	uint32_t previous = state->previous;
 	uint32_t carry = state->carry;
 
+	// Pair-lane layout: pair i is (h[i], h[i+4]).  The carry accumulator
+	// is untouched here; it stays zero until the sixteen-byte remainder
+	// stripes after the eight-to-four fold.  `previous` hands the last raw
+	// word to those stripes exactly as before.
 #if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
 #pragma GCC unroll 8
 #elif defined(__GNUC__) && !defined(__clang__) && \
       (defined(__x86_64__) || defined(__i386__))
 #pragma GCC unroll 2
+#elif defined(__GNUC__) && !defined(__clang__)
+#pragma GCC unroll 4
 #endif
 	while (length != 0) {
 		uint32_t w0 = haya32x64_internal_load32le(p + 0);
 		uint32_t w1 = haya32x64_internal_load32le(p + 4);
 		uint32_t w2 = haya32x64_internal_load32le(p + 8);
 		uint32_t w3 = haya32x64_internal_load32le(p + 12);
-		uint32_t t0 = w0 + haya32x64_internal_rotl(previous, 11);
-		uint32_t t1 = w1 + haya32x64_internal_rotl(w0, 11);
-		uint32_t t2 = w2 + haya32x64_internal_rotl(w1, 11);
-		uint32_t t3 = w3 + haya32x64_internal_rotl(w2, 11);
-		HAYA32X64_INTERNAL_LANES4_BULK(
-			h0, h1, h2, h3, t0, t1, t2, t3, carry);
-
 		uint32_t w4 = haya32x64_internal_load32le(p + 16);
 		uint32_t w5 = haya32x64_internal_load32le(p + 20);
 		uint32_t w6 = haya32x64_internal_load32le(p + 24);
 		uint32_t w7 = haya32x64_internal_load32le(p + 28);
-		uint32_t t4 = w4 + haya32x64_internal_rotl(w3, 11);
-		uint32_t t5 = w5 + haya32x64_internal_rotl(w4, 11);
-		uint32_t t6 = w6 + haya32x64_internal_rotl(w5, 11);
-		uint32_t t7 = w7 + haya32x64_internal_rotl(w6, 11);
-		HAYA32X64_INTERNAL_LANES4_BULK(
-			h4, h5, h6, h7, t4, t5, t6, t7, carry);
+		HAYA32X64_INTERNAL_PAIR(h0, h4, w0, w1,
+			HAYA32X64_INTERNAL_KA, HAYA32X64_INTERNAL_KB);
+		HAYA32X64_INTERNAL_PAIR(h1, h5, w2, w3,
+			HAYA32X64_INTERNAL_KB, HAYA32X64_INTERNAL_KC);
+		HAYA32X64_INTERNAL_PAIR(h2, h6, w4, w5,
+			HAYA32X64_INTERNAL_KC, HAYA32X64_INTERNAL_KD);
+		HAYA32X64_INTERNAL_PAIR(h3, h7, w6, w7,
+			HAYA32X64_INTERNAL_KD, HAYA32X64_INTERNAL_KE);
 		previous = w7;
-		h0 += previous;
 		p += 32;
 		length -= 32;
 	}
@@ -413,18 +410,24 @@ haya32x64_hash(const void *key, size_t len, uint32_t seed_lo, uint32_t seed_hi)
 		p += blocks;
 		l -= blocks;
 
+		// Cross-pair fold: lane a_i combines with the neighbouring
+		// pair's b, so a difference confined to one pair reaches two
+		// folded words (each a bijection of its lane input) and both
+		// finalizer products.  Folding a_i with its own b_i funnels a
+		// pair-confined difference through one 32-bit word; SMHasher3's
+		// Sparse/OneByte/Long long-key tests collide that at 2^-32.
 		h0 = haya32x64_internal_mul(
-			h0 ^ haya32x64_internal_rotl(h4, 11),
+			h0 ^ haya32x64_internal_rotl(h5, 11),
 			HAYA32X64_INTERNAL_KA).lo ^ carry;
 		h1 = haya32x64_internal_mul(
-			h1 ^ haya32x64_internal_rotl(h5, 19),
+			h1 ^ haya32x64_internal_rotl(h6, 19),
 			HAYA32X64_INTERNAL_KB).lo;
 		h2 = haya32x64_internal_mul(
-			h2 ^ haya32x64_internal_rotl(h6, 7),
+			h2 ^ haya32x64_internal_rotl(h7, 7),
 			HAYA32X64_INTERNAL_KC).lo ^
 		     haya32x64_internal_rotl(carry, 16);
 		h3 = haya32x64_internal_mul(
-			h3 ^ haya32x64_internal_rotl(h7, 23),
+			h3 ^ haya32x64_internal_rotl(h4, 23),
 			HAYA32X64_INTERNAL_KD).lo;
 	}
 
@@ -632,15 +635,15 @@ haya32x64_digest(const haya32x64_state *state)
 	}
 
 	h0 = haya32x64_internal_mul(
-		h0 ^ haya32x64_internal_rotl(h4, 11), HAYA32X64_INTERNAL_KA).lo ^
+		h0 ^ haya32x64_internal_rotl(h5, 11), HAYA32X64_INTERNAL_KA).lo ^
 	     carry;
 	h1 = haya32x64_internal_mul(
-		h1 ^ haya32x64_internal_rotl(h5, 19), HAYA32X64_INTERNAL_KB).lo;
+		h1 ^ haya32x64_internal_rotl(h6, 19), HAYA32X64_INTERNAL_KB).lo;
 	h2 = haya32x64_internal_mul(
-		h2 ^ haya32x64_internal_rotl(h6, 7), HAYA32X64_INTERNAL_KC).lo ^
+		h2 ^ haya32x64_internal_rotl(h7, 7), HAYA32X64_INTERNAL_KC).lo ^
 	     haya32x64_internal_rotl(carry, 16);
 	h3 = haya32x64_internal_mul(
-		h3 ^ haya32x64_internal_rotl(h7, 23), HAYA32X64_INTERNAL_KD).lo;
+		h3 ^ haya32x64_internal_rotl(h4, 23), HAYA32X64_INTERNAL_KD).lo;
 
 	if (l >= 16) {
 		uint32_t w0 = haya32x64_internal_load32le(p + 0);
