@@ -112,20 +112,34 @@ pointer is valid only when the length is zero.
 
 ## Performance snapshot
 
-These are the candidate measurements that motivated the repository, not
-portable guarantees. Pure JavaScript was measured on Node 22 / V8 12.4; C was
-measured on one native host. They predate the streaming-capable digest and
-have not yet been rerun. Re-measurement across engines and architectures is
-part of the release bar.
+Measured August 9, 2026 on one EC2 C8a (AMD EPYC 9R45) and one C8g (Arm
+Neoverse V2), using Node.js 24.18 / V8 13.6. JavaScript values are medians of
+nine warmed public-API samples; MB/s is decimal.
 
-| Node 22, pure JS | haya32x64 | cyrb53 (biased, 53-bit) | hayahash64 BigInt | hayahash64 wasm |
-|---|---:|---:|---:|---:|
-| bulk 1 MiB | **885 MB/s** | 731 | 102 | 16,448 |
-| 4–8 byte keys | **47 ns** | 8–13 | 448–501 | 57–59 |
+| byte API | bits | C8a 4 B | C8g 4 B | C8a 1 MiB | C8g 1 MiB |
+|---|---:|---:|---:|---:|---:|
+| haya32x64 pure JS | 64 | **23.1 ns** | **34.5 ns** | 1,062 MB/s | 251 MB/s |
+| haya32x64 hybrid | 64 | **23.1 ns** | **34.9 ns** | 6,921 MB/s | 4,785 MB/s |
+| hayahash64 BigInt | 64 | 496.6 ns | 701.8 ns | 83 MB/s | 67 MB/s |
+| hayahash64 wasm | 64 | 48.1 ns | 80.4 ns | 16,210 MB/s | 11,431 MB/s |
+| xxhash-wasm XXH64 | 64 | 39.4 ns | 63.8 ns | 16,092 MB/s | 11,067 MB/s |
+| cyrb53 bytes | 53 | 3.8 ns | 6.0 ns | 1,116 MB/s | 778 MB/s |
 
-The reference C candidate measured 5.3 GB/s in bulk. The point is not to win
-on 64-bit CPUs; it is to provide full 64-bit quality where efficient 64-bit
-arithmetic is unavailable.
+The pure-JavaScript streaming engine reached 1,568 MB/s on C8a and 1,018
+MB/s on C8g with 64 KiB chunks. Its much lower C8g one-shot bulk result was
+repeatable in this run and points to an architecture-specific V8 code-path
+tuning opportunity rather than transient measurement noise.
+
+Native SMHasher3 speed tests, built with GCC 15.2 and `-O3 -march=native`,
+measured `haya32x64` at 19.22 cycles/hash for 1–31-byte keys and 3.29
+bytes/cycle in bulk on C8a; C8g measured 34.58 cycles/hash and 2.60
+bytes/cycle. Modern hashes using native 64-bit arithmetic remain much faster
+in bulk, as expected; `haya32x64` is for environments where that arithmetic
+is unavailable or expensive.
+
+See [performance and cross-architecture validation](docs/benchmarks.md) for
+expanded native, JavaScript, string, and streaming tables, methodology,
+limitations, raw results, and reproduction commands.
 
 ## Development
 
@@ -140,6 +154,6 @@ HAYA32X64_CORPUS=/tmp/haya32x64.bin node --test js/test/differential.test.mjs
 ```
 
 Documentation: [design](docs/design.md) · [quality](docs/quality.md) ·
-[SMHasher3](docs/smhasher3.md)
+[benchmarks](docs/benchmarks.md) · [SMHasher3](docs/smhasher3.md)
 
 *Haya* (速) is Japanese for “fast.”

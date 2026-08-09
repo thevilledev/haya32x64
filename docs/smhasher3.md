@@ -22,6 +22,25 @@ Expected values:
 | canonical little endian | `0xEAA8E435` |
 | byte-swapped | `0x8705401D` |
 
+## Speed comparisons
+
+SMHasher3 is also used as the common native harness for small-key and bulk
+speed comparisons:
+
+```sh
+make benchmark-native > native.txt
+```
+
+That target builds the pinned checkout with `-O3 -march=native -DNDEBUG` and
+runs the comparator set on one CPU. The extra `-include cstdlib` flag works
+around a missing include in the pinned upstream tree when building with GCC
+15 on AArch64. It does not alter the hash implementations. See the
+[benchmark methodology and results](benchmarks.md) for the comparator
+rationale, JavaScript harness, and checked-in raw output.
+
+A SMHasher3 speed run is not a quality run and does not imply that every
+listed comparator passes the statistical test suite.
+
 SMHasher3 is GPL-3.0-or-later. Fetching it separately keeps its test framework
 out of the public-domain library and npm artifacts; redistribution of a linked
 test executable must follow the GPL.

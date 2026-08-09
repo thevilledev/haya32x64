@@ -7,12 +7,14 @@ canonical verification value `0xEAA8E435` (`0x8705401D` for the byte-swapped
 variant).
 The run used the pinned commit documented in [SMHasher3 setup](smhasher3.md).
 
-Important scope: this is currently a self-run result on one host and the
-adapter in `tests/smhasher3/haya32x64.cpp`. The shipped header has been checked
+Important scope: the complete 188-test SMHasher3 result is currently a
+self-run result on one host and the adapter in
+`tests/smhasher3/haya32x64.cpp`. The shipped header has been checked
 bit-for-bit against that adapter across 100,000 randomized inputs and the
 shared vectors, but an upstream SMHasher3 row and a multi-host/compiler matrix
-remain release work. “Passes SMHasher3” is evidence against known statistical
-and structural flaws, not evidence of cryptographic security.
+for the full battery remain release work. “Passes SMHasher3” is evidence
+against known statistical and structural flaws, not evidence of cryptographic
+security.
 
 ## Tests in this repository
 
@@ -39,6 +41,14 @@ the SMHasher3 verification value through both engines. The differential
 generator emits randomized inputs and C-reference digests; the pure-JS,
 streaming-JS, and wasm engines must consume the identical corpus without a
 mismatch.
+
+On August 9, 2026, these repository suites passed with GCC 15.2 and Node.js
+24.18 on both an x86-64 EC2 C8a (AMD EPYC 9R45) and an AArch64 EC2 C8g (Arm
+Neoverse V2). A 4,096-case C differential corpus also matched all three
+JavaScript modes on both machines. This is useful cross-architecture
+validation, but it is distinct from repeating all 188 SMHasher3 quality tests;
+see the [performance report](benchmarks.md) for the machine details and raw
+speed results.
 
 ## Portability coverage
 

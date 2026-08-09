@@ -1,0 +1,15 @@
+{
+	"name": "haya32x64-benchmarks",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"bench": "node --expose-gc js.mjs",
+		"report": "node report.mjs"
+	},
+	"dependencies": {
+		"hayahash": "0.4.6",
+		"imurmurhash": "0.1.4",
+		"xxhash-wasm": "1.1.0",
+		"xxhashjs": "0.2.2"
+	}
+}
