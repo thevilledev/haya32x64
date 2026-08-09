@@ -2,7 +2,7 @@
 
 The current snapshot was collected on August 9, 2026 from one On-Demand
 instance of each type, measuring the pair-lane bulk kernel (verification
-value `0xA860AB01`). It is a reproducible comparison, not a portable
+value `0x431563D2`). It is a reproducible comparison, not a portable
 performance guarantee or a multi-instance distribution.
 
 | host | processor | architecture | vCPUs |
@@ -55,35 +55,35 @@ market-relevant baselines, not equal-quality 64-bit substitutes.
 
 | algorithm | bits | C8a 4 B | C8a 8 B | C8g 4 B | C8g 8 B |
 |---|---|---|---|---|---|
-| haya32x64 pure JS | 64 | 22.9 | 22.0 | 34.0 | 34.1 |
-| haya32x64 hybrid | 64 | 23.4 | 22.5 | 34.5 | 34.2 |
-| hayahash64 BigInt | 64 | 506.7 | 529.9 | 666.9 | 642.8 |
-| hayahash64 wasm | 64 | 49.4 | 49.3 | 81.0 | 80.0 |
-| xxhash-wasm XXH64 | 64 | 39.8 | 40.1 | 64.4 | 72.3 |
-| xxhashjs XXH64 | 64 | 1959.1 | 1977.5 | 2693.9 | 2687.5 |
-| cyrb53 bytes | 53 | 3.8 | 5.8 | 6.1 | 8.6 |
+| haya32x64 pure JS | 64 | 22.9 | 22.4 | 34.0 | 33.9 |
+| haya32x64 hybrid | 64 | 23.2 | 22.4 | 34.2 | 34.3 |
+| hayahash64 BigInt | 64 | 517.7 | 530.3 | 662.8 | 642.6 |
+| hayahash64 wasm | 64 | 48.8 | 48.5 | 80.6 | 82.7 |
+| xxhash-wasm XXH64 | 64 | 39.4 | 40.5 | 63.9 | 72.7 |
+| xxhashjs XXH64 | 64 | 1939.3 | 1971.4 | 2691.0 | 2674.8 |
+| cyrb53 bytes | 53 | 4.7 | 5.8 | 6.1 | 8.5 |
 
 | algorithm | bits | C8a | C8g |
 |---|---|---|---|
-| haya32x64 pure JS | 64 | 4620 | 3557 |
-| haya32x64 hybrid | 64 | 9298 | 5655 |
-| hayahash64 BigInt | 64 | 83 | 67 |
-| hayahash64 wasm | 64 | 16088 | 11414 |
-| xxhash-wasm XXH64 | 64 | 15928 | 10918 |
-| xxhashjs XXH64 | 64 | 36 | 28 |
-| cyrb53 bytes | 53 | 1109 | 786 |
+| haya32x64 pure JS | 64 | 4462 | 3886 |
+| haya32x64 hybrid | 64 | 10971 | 6056 |
+| hayahash64 BigInt | 64 | 82 | 67 |
+| hayahash64 wasm | 64 | 16034 | 11488 |
+| xxhash-wasm XXH64 | 64 | 15973 | 10738 |
+| xxhashjs XXH64 | 64 | 37 | 28 |
+| cyrb53 bytes | 53 | 1107 | 787 |
 
 The package crosses from pure JavaScript to wasm at 16 bytes. The pair-lane
-kernel raised pure-JavaScript 1 MiB throughput 2.5x on C8a and 3.1x on C8g
-over the previous kernel, and the wasm engine gained 35%/19% behind its
+kernel raised pure-JavaScript 1 MiB throughput 2.8x on C8a and 3.3x on C8g
+over the original kernel, and the wasm engine gained behind its
 copy-bounded boundary. The boundary is visible in the public-API medians:
 
 | engine | host | 15 B | 16 B | 17 B | 4 KiB |
 |---|---|---|---|---|---|
-| pure JS | C8a | 59.9 | 72.6 | 81.7 | 1031.2 |
-| hybrid | C8a | 60.6 | 51.7 | 52.6 | 433.6 |
-| pure JS | C8g | 109.1 | 184.2 | 195.4 | 1382.3 |
-| hybrid | C8g | 109.8 | 81.5 | 82.9 | 783.1 |
+| pure JS | C8a | 61.4 | 68.4 | 73.6 | 1055.5 |
+| hybrid | C8a | 61.9 | 51.8 | 51.8 | 378.5 |
+| pure JS | C8g | 109.8 | 184.4 | 195.4 | 1346.7 |
+| hybrid | C8g | 110.3 | 82.5 | 84.7 | 742.3 |
 
 ### Streaming 1 MiB byte input
 
@@ -92,13 +92,13 @@ materializes the final digest.
 
 | algorithm | chunk | C8a | C8g |
 |---|---|---|---|
-| haya32x64 pure JS | 64 B | 690 | 363 |
-| haya32x64 pure JS | 4096 B | 3921 | 3030 |
-| haya32x64 pure JS | 65536 B | 4549 | 3840 |
+| haya32x64 pure JS | 64 B | 666 | 380 |
+| haya32x64 pure JS | 4096 B | 3906 | 2957 |
+| haya32x64 pure JS | 65536 B | 4497 | 3722 |
 | xxhash-wasm XXH64 | 64 B | 1130 | 616 |
-| xxhash-wasm XXH64 | 4096 B | 14049 | 8560 |
-| xxhash-wasm XXH64 | 65536 B | 16921 | 11113 |
-| xxhashjs XXH64 | 64 B | 38 | 27 |
+| xxhash-wasm XXH64 | 4096 B | 14148 | 8550 |
+| xxhash-wasm XXH64 | 65536 B | 16863 | 11126 |
+| xxhashjs XXH64 | 64 B | 37 | 28 |
 | xxhashjs XXH64 | 4096 B | 40 | 29 |
 | xxhashjs XXH64 | 65536 B | 40 | 29 |
 
@@ -106,14 +106,14 @@ materializes the final digest.
 
 | algorithm | bits | C8a 8 chars | C8a 32 chars | C8g 8 chars | C8g 32 chars |
 |---|---|---|---|---|---|
-| haya32x64 pure JS | 64 | 269.6 | 364.7 | 487.0 | 656.9 |
-| haya32x64 hybrid | 64 | 275.2 | 323.3 | 492.1 | 616.9 |
-| hayahash64 BigInt | 64 | 842.5 | 1250.2 | 1244.2 | 1765.9 |
-| hayahash64 wasm | 64 | 292.9 | 308.5 | 582.1 | 616.2 |
-| xxhash-wasm XXH64 | 64 | 59.3 | 72.2 | 97.4 | 121.5 |
-| xxhashjs XXH64 | 64 | 2452.5 | 3605.4 | 3326.9 | 4905.1 |
-| cyrb53 string | 53 | 6.4 | 157.8 | 8.5 | 283.6 |
-| imurmurhash | 32 | 22.9 | 55.1 | 43.6 | 102.4 |
+| haya32x64 pure JS | 64 | 267.9 | 362.1 | 489.6 | 660.3 |
+| haya32x64 hybrid | 64 | 276.3 | 328.1 | 507.1 | 638.6 |
+| hayahash64 BigInt | 64 | 822.9 | 1261.0 | 1230.8 | 1761.2 |
+| hayahash64 wasm | 64 | 290.6 | 307.6 | 580.0 | 625.3 |
+| xxhash-wasm XXH64 | 64 | 59.2 | 72.0 | 96.5 | 120.7 |
+| xxhashjs XXH64 | 64 | 2437.8 | 3613.5 | 3332.5 | 4928.0 |
+| cyrb53 string | 53 | 6.5 | 161.5 | 9.6 | 276.2 |
+| imurmurhash | 32 | 22.8 | 57.4 | 43.7 | 103.4 |
 
 ## Native SMHasher3 results
 
@@ -131,31 +131,32 @@ these 64-bit hosts.
 
 | algorithm | bits | C8a cycles 1–31 B | C8a B/cycle | C8g cycles 1–31 B | C8g B/cycle |
 |---|---|---|---|---|---|
-| haya32x64 | 64 | 18.95 | 6.33 | 34.36 | 3.57 |
-| khashv-64 | 64 | 46.16 | 2.78 | 105.52 | 1.60 |
-| lookup3 | 64 | 12.13 | 1.49 | 35.22 | 0.86 |
-| MurmurHash2-64.int32 | 64 | 16.40 | 3.31 | 32.14 | 2.67 |
-| a5hash-32 | 32 | 7.41 | 4.51 | 21.46 | 2.95 |
-| XXH-32 | 32 | 18.48 | 4.89 | 35.58 | 2.93 |
-| t1ha0 | 64 | 18.72 | 5.21 | 35.61 | 3.63 |
+| haya32x64 | 64 | 18.96 | 7.50 | 34.71 | 4.09 |
+| khashv-64 | 64 | 46.19 | 2.78 | 105.70 | 1.60 |
+| lookup3 | 64 | 12.14 | 1.49 | 35.20 | 0.86 |
+| MurmurHash2-64.int32 | 64 | 16.43 | 3.31 | 32.01 | 2.67 |
+| a5hash-32 | 32 | 7.35 | 4.53 | 21.47 | 2.95 |
+| XXH-32 | 32 | 18.55 | 4.89 | 35.62 | 2.88 |
+| t1ha0 | 64 | 18.74 | 5.21 | 35.52 | 3.64 |
 | a5hash-128.64 | 64 | 7.36 | 15.53 | 20.48 | 10.07 |
-| XXH3-64 | 64 | 13.97 | 61.02 | 25.69 | 10.76 |
-| rapidhash | 64 | 13.49 | 19.50 | 25.78 | 8.94 |
-| wyhash.strict | 64 | 13.20 | 11.03 | 28.44 | 6.80 |
-| ChibiHash2 | 64 | 12.46 | 10.67 | 29.01 | 7.24 |
-| MuseAir.bfast | 64 | 8.42 | 18.14 | 23.56 | 9.71 |
+| XXH3-64 | 64 | 13.99 | 60.59 | 25.72 | 10.76 |
+| rapidhash | 64 | 13.51 | 19.47 | 25.78 | 8.94 |
+| wyhash.strict | 64 | 13.21 | 11.02 | 28.43 | 6.79 |
+| ChibiHash2 | 64 | 12.45 | 10.48 | 29.14 | 7.25 |
+| MuseAir.bfast | 64 | 8.42 | 18.14 | 23.59 | 9.77 |
 
 Within the close 32-bit-core set, haya32x64 has the highest bulk throughput
-on both hosts: 91% above `MurmurHash2-64.int32` on C8a and 34% above it on
-C8g, with 256 KiB bulk up 81%/31% over the previous kernel at essentially
-unchanged 1-31-byte latency (18.95 versus 19.06 cycles/hash on C8a). Against
+on both hosts: 2.3x `MurmurHash2-64.int32` on C8a and 1.5x on C8g, with
+256 KiB bulk at 2.1x/1.5x the original kernel at essentially unchanged
+1-31-byte latency (18.96 versus 19.06 cycles/hash on C8a). Against
 `khashv-64`, the passing-quality comparator in that set, haya32x64 is
-2.4x/3.1x faster for 1-31-byte keys and 2.3x/2.2x faster in bulk on
-C8a/C8g. Among the native-64-bit ceiling rows, `t1ha0` now measures 21%
-behind haya32x64 in bulk on C8a and 2% ahead on C8g. MurmurHash2 and
-lookup3 remain speed references rather than full-quality peers: the pinned
+2.4x/3.0x faster for 1-31-byte keys and 2.7x/2.6x faster in bulk on
+C8a/C8g. It also now exceeds every 32-bit-arithmetic row in the wider
+table on both hosts, including `t1ha0` (by 44% on C8a and 12% on C8g) and
+the 32-bit-output floors `a5hash-32` and `XXH-32`. MurmurHash2 and lookup3
+remain speed references rather than full-quality peers: the pinned
 upstream raw reports pass 42/250 and 116/238 respectively. Short-key
-latency still trails MurmurHash2 by 16% on C8a and 7% on C8g; seed
+latency still trails MurmurHash2 by 15% on C8a and 8% on C8g; seed
 premixing and the wider finalizer account for that quality cost.
 
 ## Reproduction and raw data

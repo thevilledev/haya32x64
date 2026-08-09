@@ -125,27 +125,28 @@ nine warmed public-API samples; MB/s is decimal.
 
 | byte API | bits | C8a 4 B | C8g 4 B | C8a 1 MiB | C8g 1 MiB |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 pure JS | 64 | **22.9 ns** | **34.0 ns** | **4,620 MB/s** | **3,557 MB/s** |
-| haya32x64 hybrid | 64 | **23.4 ns** | **34.5 ns** | 9,298 MB/s | 5,655 MB/s |
-| hayahash64 BigInt | 64 | 506.7 ns | 666.9 ns | 83 MB/s | 67 MB/s |
-| hayahash64 wasm | 64 | 49.4 ns | 81.0 ns | 16,088 MB/s | 11,414 MB/s |
-| xxhash-wasm XXH64 | 64 | 39.8 ns | 64.4 ns | 15,928 MB/s | 10,918 MB/s |
-| cyrb53 bytes | 53 | 3.8 ns | 6.1 ns | 1,109 MB/s | 786 MB/s |
+| haya32x64 pure JS | 64 | **22.9 ns** | **34.0 ns** | **4,462 MB/s** | **3,886 MB/s** |
+| haya32x64 hybrid | 64 | **23.2 ns** | **34.2 ns** | 10,971 MB/s | 6,056 MB/s |
+| hayahash64 BigInt | 64 | 517.7 ns | 662.8 ns | 82 MB/s | 67 MB/s |
+| hayahash64 wasm | 64 | 48.8 ns | 80.6 ns | 16,034 MB/s | 11,488 MB/s |
+| xxhash-wasm XXH64 | 64 | 39.4 ns | 63.9 ns | 15,973 MB/s | 10,738 MB/s |
+| cyrb53 bytes | 53 | 4.7 ns | 6.1 ns | 1,107 MB/s | 787 MB/s |
 
 The pair-lane bulk kernel absorbs eight input bytes per complete 32×32
 product. At 1 MiB that multiplied pure-JavaScript one-shot throughput by
-2.5x on C8a and 3.1x on C8g over the previous kernel; streaming with 64 KiB
-chunks reached 4,549 MB/s and 3,840 MB/s.
+2.4x on C8a and 3.4x on C8g over the original kernel; streaming with 64 KiB
+chunks reached 4,497 MB/s and 3,722 MB/s.
 
 Native SMHasher3 speed tests, built with GCC 15.2 and `-O3 -march=native`,
-measured `haya32x64` at 18.95 cycles/hash for 1–31-byte keys and 6.33
-bytes/cycle in bulk on C8a; C8g measured 34.36 cycles/hash and 3.57
-bytes/cycle. Bulk is up 81% and 31% over the previous kernel at unchanged
-short-key latency, the highest bulk throughput in the report's close
-64-bit-output, 32-bit-core comparison set on both hosts, and on C8a now
-ahead of `t1ha0` in the same harness. Hashes built on native 64-bit
-multiplies remain much faster, as expected; `haya32x64` is for environments
-where that arithmetic is unavailable or expensive.
+measured `haya32x64` at 18.96 cycles/hash for 1–31-byte keys and 7.50
+bytes/cycle in bulk on C8a; C8g measured 34.71 cycles/hash and 4.09
+bytes/cycle. Bulk is 2.1x and 1.5x the original kernel at unchanged
+short-key latency — the highest bulk throughput in the report's close
+64-bit-output, 32-bit-core comparison set, and ahead of every
+32-bit-arithmetic row in the wider table, including `t1ha0`, on both hosts.
+Hashes built on native 64-bit multiplies remain much faster, as expected;
+`haya32x64` is for environments where that arithmetic is unavailable or
+expensive.
 
 See [performance and cross-architecture validation](docs/benchmarks.md) for
 expanded native, JavaScript, string, and streaming tables, methodology,
