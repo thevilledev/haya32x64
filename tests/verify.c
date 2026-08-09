@@ -19,8 +19,8 @@ int main(void)
 	}
 	haya32x64_words final = haya32x64_hash(hashes, sizeof(hashes), 0, 0);
 	printf("%08" PRIx32 "\n", final.lo);
-	if (final.lo != UINT32_C(0xA860AB01)) {
-		fprintf(stderr, "verification mismatch: expected a860ab01\n");
+	if (final.lo != UINT32_C(0x431563D2)) {
+		fprintf(stderr, "verification mismatch: expected 431563d2\n");
 		return 1;
 	}
 	return 0;

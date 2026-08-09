@@ -67,8 +67,8 @@ static inline uint32_t hy_injb( uint32_t w ) {
         const uint32_t u0_ = (w0) ^ (k0);                      \
         const uint32_t u1_ = (w1) ^ (k1);                      \
         uint64_t m_ = (uint64_t)(u0_ + (a)) * (u1_ + (b));     \
-        (a) = (uint32_t)m_ + hy_rotl32(u1_, 16);               \
-        (b) = (uint32_t)(m_ >> 32) ^ u0_;                      \
+        (a) = (uint32_t)m_ + u0_;                              \
+        (b) = (uint32_t)(m_ >> 32) ^ u1_;                      \
     } while (0)
 
 static inline uint64_t hy_final( uint32_t h0, uint32_t h1,
@@ -113,11 +113,9 @@ static NEVER_INLINE void hy_bulk( hy_bulk_state & state,
     uint32_t h7 = state.h[7];
     uint32_t wp = state.previous;
     uint32_t C  = state.carry;
-#if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
+#if defined(__GNUC__) && !defined(__clang__) && \
+    (defined(__aarch64__) || defined(__x86_64__) || defined(__i386__))
 #pragma GCC unroll 8
-#elif defined(__GNUC__) && !defined(__clang__) && \
-      (defined(__x86_64__) || defined(__i386__))
-#pragma GCC unroll 2
 #elif defined(__GNUC__) && !defined(__clang__)
 #pragma GCC unroll 4
 #endif
@@ -279,8 +277,8 @@ REGISTER_HASH(haya32x64,
          FLAG_IMPL_MULTIPLY              |
          FLAG_IMPL_ROTATE,
    $.bits            = 64,
-   $.verification_LE = 0xA860AB01,
-   $.verification_BE = 0x5F259261,
+   $.verification_LE = 0x431563D2,
+   $.verification_BE = 0x65BBCA3D,
    $.hashfn_native   = Haya32x64<false>,
    $.hashfn_bswap    = Haya32x64<true>
  );
