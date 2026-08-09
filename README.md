@@ -42,7 +42,7 @@ itself does not need `BigInt`.
 ## Status and quality
 
 The digest is experimental and currently frozen at verification value
-`0xA860AB01`. The current kernel passed **the complete default SMHasher3
+`0x431563D2`. The current kernel passed **the complete default SMHasher3
 battery** — 186/186 scored tests in the harness's own summary, plus both
 verification checks — at the repository's pinned upstream commit on both an
 x86-64 (AMD EPYC 9R45) and an AArch64 (Neoverse V2) host. That result is a
@@ -51,8 +51,8 @@ self-run, not yet an upstream SMHasher3 result; see
 claim.
 
 The bulk kernel (inputs of 128 bytes and above) absorbs eight bytes per
-complete 32×32 multiply; digests for inputs below 128 bytes are identical to
-the previous revision (`0xEAA8E435`).
+complete 32×32 multiply; digests for inputs below 128 bytes are identical
+across every revision back to the original `0xEAA8E435` digest.
 
 The production C header is bit-exact with that candidate. The repository also
 checks:

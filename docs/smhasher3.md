@@ -19,12 +19,12 @@ Expected values:
 
 | mode | verification |
 |---|---:|
-| canonical little endian | `0xA860AB01` |
-| byte-swapped | `0x5F259261` |
+| canonical little endian | `0x431563D2` |
+| byte-swapped | `0x65BBCA3D` |
 
-Digests for inputs below 128 bytes are unchanged from the previous
-verification value `0xEAA8E435`; the values above reflect the pair-lane
-bulk kernel introduced for inputs of 128 bytes and above.
+Digests for inputs below 128 bytes are unchanged across every revision back
+to the original `0xEAA8E435` digest; the values above reflect the pair-lane
+bulk kernel used for inputs of 128 bytes and above.
 
 ## Speed comparisons
 

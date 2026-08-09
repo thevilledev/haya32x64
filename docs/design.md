@@ -12,8 +12,8 @@ enters one complete 32×32 multiply:
 ```text
 u0 = w0 xor k0            u1 = w1 xor k1
 m  = (u0 + a) * (u1 + b)
-a  = low32(m) + rotl32(u1, 16)
-b  = high32(m) xor u0
+a  = low32(m) + u0
+b  = high32(m) xor u1
 ```
 
 The per-pair key words `k0, k1` are the odd diffusion constants; each pair
@@ -30,13 +30,21 @@ Three details carry the quality argument:
   operands become `k + state`, so the all-zero state is not a fixed point,
   and chaining the state through the product keeps block order significant,
   unlike purely additive accumulation.
-- The half rotation on the raw feedback is load-bearing. With an unrotated
-  `low32(m) + u1`, a difference of `2^b` in `w1` contributes
-  `((u0 + a + 1) << b)` to the new `a`, which vanishes deterministically for
-  half of all states at `b = 31`. SMHasher3's long-key Sparse, OneByte, and
-  Long keysets found exactly that cancellation in an earlier candidate; the
-  rotation separates the product difference from the raw difference at every
-  bit position and costs nothing on the multiply's critical path.
+- The cross-feed — each lane's raw feedback takes the word from the *other*
+  multiplier operand — is load-bearing. Feeding a side its own word aligns
+  the product difference and the raw difference at the same bit shift:
+  `low32(m) + u1` turns a difference of `2^b` in `w1` into
+  `((u0 + a + 1) << b)`, which vanishes deterministically for half of all
+  states at `b = 31`, and SMHasher3's long-key Sparse, OneByte, and Long
+  keysets collided exactly that in an earlier candidate. Crossed, a `w1`
+  difference reaches `b` through `high32(m) xor u1`, where the high-word
+  difference is always smaller than `2^b`, so the raw bit survives; a `w0`
+  difference reaches `a` through `low32(m) + u0`, and cancelling both lanes
+  at once pins the opposite operand to a single value, so any single-word
+  difference survives except at one lane state in about `2^32`. An interim
+  candidate achieved the same decoupling by rotating the raw copy
+  (`low32(m) + rotl32(u1, 16)`) and passed the full battery, but the extra
+  rotations cost 13-18% bulk throughput; the cross-feed costs nothing.
 - Pairs are otherwise independent, so the eight-to-four fold combines lane
   `a_i` with the neighbouring pair's `b_{(i+1) mod 4}`. A difference confined
   to one pair therefore reaches two folded words, each a bijection of its

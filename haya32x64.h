@@ -13,8 +13,8 @@
 //     multiply whose operands both carry seeded, evolving lane state:
 //       u0 = w0 ^ k0            u1 = w1 ^ k1
 //       m  = (u0 + a) * (u1 + b)
-//       a  = lo(m) + rotl32(u1, 16)
-//       b  = hi(m) ^ u0
+//       a  = lo(m) + u0
+//       b  = hi(m) ^ u1
 //     Operand blinding therefore requires knowing the lane state, which is
 //     seed-derived and input-evolved, and a degenerate product still deposits
 //     both invertibly keyed words into the pair.  With all-zero input the
@@ -196,22 +196,26 @@ haya32x64_internal_seed(uint32_t seed_lo, uint32_t seed_hi,
 // bytes.  The keyed words are computed once and reused by the multiplier
 // operands and the feedback, which keeps the constants off the serial
 // dependency chain and avoids extra register copies on two-operand ISAs.
-// The half-rotated raw feedback is load-bearing: with an unrotated
-// `lo + u1`, a difference of 2^b in w1 contributes ((operand+1) << b) to
-// the new a-lane, which vanishes deterministically for half of all states
-// at b = 31.  SMHasher3's Sparse/OneByte/Long keysets found exactly that
-// cancellation.  Rotating the raw copy by 16 separates the product
-// difference from the raw difference at every bit position; the rotate is
-// off the multiply chain because it depends only on the loaded word.
+// The cross-feed is load-bearing: each lane's raw feedback uses the word
+// from the OTHER multiplier operand.  Feeding a side its own word aligns
+// the product difference and the raw difference at the same bit shift
+// (`lo + u1` turns a 2^b difference in w1 into ((operand+1) << b), which
+// vanishes deterministically for half of all states at b = 31; SMHasher3's
+// Sparse/OneByte/Long keysets collided exactly that).  Crossed, a w1
+// difference reaches b as `hi ^ u1` where the high-word difference is
+// always smaller than 2^b, and a w0 difference reaches a as `lo + u0`
+// where joint cancellation of both lanes pins the other operand to a
+// single value, so any single-word difference survives except at one
+// state in 2^32.  A zeroed product still deposits both keyed words, one
+// into each lane.
 #define HAYA32X64_INTERNAL_PAIR(a, b, w0, w1, k0, k1) \
 	do { \
 		uint32_t haya32x64_u0_ = (w0) ^ (k0); \
 		uint32_t haya32x64_u1_ = (w1) ^ (k1); \
 		haya32x64_words haya32x64_m_ = haya32x64_internal_mul( \
 			haya32x64_u0_ + (a), haya32x64_u1_ + (b)); \
-		(a) = haya32x64_m_.lo + \
-		      haya32x64_internal_rotl(haya32x64_u1_, 16); \
-		(b) = haya32x64_m_.hi ^ haya32x64_u0_; \
+		(a) = haya32x64_m_.lo + haya32x64_u0_; \
+		(b) = haya32x64_m_.hi ^ haya32x64_u1_; \
 	} while (0)
 
 #if defined(__x86_64__) || defined(_M_X64) || \
@@ -257,11 +261,9 @@ haya32x64_internal_bulk(haya32x64_internal_bulk_state *state,
 	// is untouched here; it stays zero until the sixteen-byte remainder
 	// stripes after the eight-to-four fold.  `previous` hands the last raw
 	// word to those stripes exactly as before.
-#if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
+#if defined(__GNUC__) && !defined(__clang__) && \
+    (defined(__aarch64__) || defined(__x86_64__) || defined(__i386__))
 #pragma GCC unroll 8
-#elif defined(__GNUC__) && !defined(__clang__) && \
-      (defined(__x86_64__) || defined(__i386__))
-#pragma GCC unroll 2
 #elif defined(__GNUC__) && !defined(__clang__)
 #pragma GCC unroll 4
 #endif

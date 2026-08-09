@@ -3,21 +3,27 @@
 ## SMHasher3 result
 
 The current pair-lane kernel passed the complete default SMHasher3 battery
-with canonical verification value `0xA860AB01` (`0x5F259261` for the
+with canonical verification value `0x431563D2` (`0x65BBCA3D` for the
 byte-swapped variant) on August 9, 2026, on both an x86-64 EC2 C8a (AMD
 EPYC 9R45) and an AArch64 EC2 C8g (Arm Neoverse V2), with GCC 15.2 and
 `-O3 -march=native`. The harness's own summary reports 186/186 scored tests
-plus both verification checks. Under the identical invocation the previous
+plus both verification checks. Under the identical invocation the original
 kernel also reports 186/186, so the 188/188 figure quoted for earlier
 revisions tallied the same battery differently rather than running a larger
 test set. The runs used the pinned commit documented in
 [SMHasher3 setup](smhasher3.md).
 
-Two earlier bulk-kernel candidates failed specific SMHasher3 keysets before
-this one passed; the collision mechanisms and the structural fixes they forced
-(the rotated raw feedback and the cross-pair fold) are documented in
-[design](design.md). The Sparse-1280 funnel was additionally reproduced and
-then eliminated with a local 3.3-million-key regression program.
+Earlier bulk-kernel candidates failed specific SMHasher3 keysets before this
+form passed: an unprotected raw feedback collided the long-key Sparse,
+OneByte, and Long keysets, and a self-paired eight-to-four fold funneled
+pair-confined differences at the expected 2^-32 rate. The collision
+mechanisms and the structural fixes they forced (the cross-feed and the
+cross-pair fold) are documented in [design](design.md). An interim variant
+that decoupled the feedback with a rotation instead of the cross-feed also
+passed this complete battery on both hosts (verification `0xA860AB01`)
+before being replaced by the zero-cost form. The Sparse-1280 funnel was
+additionally reproduced and then eliminated with a local 3.3-million-key
+regression program.
 
 Important scope: the complete 188-test SMHasher3 result is a self-run through
 the adapter in `tests/smhasher3/haya32x64.cpp`. The shipped header is checked
