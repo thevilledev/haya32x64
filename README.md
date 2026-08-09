@@ -35,17 +35,24 @@ Switching between them is a persisted-data migration, not a performance toggle.
 The algorithm definition is the single public-domain C header
 [`haya32x64.h`](haya32x64.h). The [`js/`](js/) package contains two bit-exact
 engines: a pure-JavaScript implementation based on `Math.imul` and exact
-16-bit limbs, and the reference header compiled to a 1.6 KB wasm module for
+16-bit limbs, and the reference header compiled to a 1.8 KB wasm module for
 bulk inputs. Both expose the digest and seed as `[low32, high32]`, so the API
 itself does not need `BigInt`.
 
 ## Status and quality
 
 The digest is experimental and currently frozen at verification value
-`0xEAA8E435`. The streaming-capable candidate passed **188/188 SMHasher3
-tests** at the repository's pinned upstream commit. That result is a self-run
-on one host, not yet an upstream SMHasher3 result; see
-[quality and reproduction](docs/quality.md) for the exact limits of the claim.
+`0xA860AB01`. The current kernel passed **the complete default SMHasher3
+battery** — 186/186 scored tests in the harness's own summary, plus both
+verification checks — at the repository's pinned upstream commit on both an
+x86-64 (AMD EPYC 9R45) and an AArch64 (Neoverse V2) host. That result is a
+self-run, not yet an upstream SMHasher3 result; see
+[quality and reproduction](docs/quality.md) for the exact limits of the
+claim.
+
+The bulk kernel (inputs of 128 bytes and above) absorbs eight bytes per
+complete 32×32 multiply; digests for inputs below 128 bytes are identical to
+the previous revision (`0xEAA8E435`).
 
 The production C header is bit-exact with that candidate. The repository also
 checks:
@@ -118,25 +125,27 @@ nine warmed public-API samples; MB/s is decimal.
 
 | byte API | bits | C8a 4 B | C8g 4 B | C8a 1 MiB | C8g 1 MiB |
 |---|---:|---:|---:|---:|---:|
-| haya32x64 pure JS | 64 | **22.2 ns** | **34.1 ns** | **1,848 MB/s** | **1,160 MB/s** |
-| haya32x64 hybrid | 64 | **23.3 ns** | **34.4 ns** | 6,884 MB/s | 4,765 MB/s |
-| hayahash64 BigInt | 64 | 496.6 ns | 701.8 ns | 83 MB/s | 67 MB/s |
-| hayahash64 wasm | 64 | 48.1 ns | 80.4 ns | 16,210 MB/s | 11,431 MB/s |
-| xxhash-wasm XXH64 | 64 | 39.4 ns | 63.8 ns | 16,092 MB/s | 11,067 MB/s |
-| cyrb53 bytes | 53 | 3.8 ns | 6.0 ns | 1,116 MB/s | 778 MB/s |
+| haya32x64 pure JS | 64 | **22.9 ns** | **34.0 ns** | **4,620 MB/s** | **3,557 MB/s** |
+| haya32x64 hybrid | 64 | **23.4 ns** | **34.5 ns** | 9,298 MB/s | 5,655 MB/s |
+| hayahash64 BigInt | 64 | 506.7 ns | 666.9 ns | 83 MB/s | 67 MB/s |
+| hayahash64 wasm | 64 | 49.4 ns | 81.0 ns | 16,088 MB/s | 11,414 MB/s |
+| xxhash-wasm XXH64 | 64 | 39.8 ns | 64.4 ns | 15,928 MB/s | 10,918 MB/s |
+| cyrb53 bytes | 53 | 3.8 ns | 6.1 ns | 1,109 MB/s | 786 MB/s |
 
-The pure-JavaScript engine now reuses one compact block kernel for one-shot
-and streaming inputs. At 1 MiB that raised one-shot throughput by 74% on C8a
-and 4.6x on C8g without changing the digest. Streaming with 64 KiB chunks
-reached 1,819 MB/s and 1,113 MB/s respectively.
+The pair-lane bulk kernel absorbs eight input bytes per complete 32×32
+product. At 1 MiB that multiplied pure-JavaScript one-shot throughput by
+2.5x on C8a and 3.1x on C8g over the previous kernel; streaming with 64 KiB
+chunks reached 4,549 MB/s and 3,840 MB/s.
 
 Native SMHasher3 speed tests, built with GCC 15.2 and `-O3 -march=native`,
-measured `haya32x64` at 19.06 cycles/hash for 1–31-byte keys and 3.50
-bytes/cycle in bulk on C8a; C8g measured 34.56 cycles/hash and 2.74
-bytes/cycle. This is the highest bulk throughput in the report's close
-64-bit-output, 32-bit-core comparison set on both hosts. Modern hashes using
-native 64-bit arithmetic remain much faster, as expected; `haya32x64` is for
-environments where that arithmetic is unavailable or expensive.
+measured `haya32x64` at 18.95 cycles/hash for 1–31-byte keys and 6.33
+bytes/cycle in bulk on C8a; C8g measured 34.36 cycles/hash and 3.57
+bytes/cycle. Bulk is up 81% and 31% over the previous kernel at unchanged
+short-key latency, the highest bulk throughput in the report's close
+64-bit-output, 32-bit-core comparison set on both hosts, and on C8a now
+ahead of `t1ha0` in the same harness. Hashes built on native 64-bit
+multiplies remain much faster, as expected; `haya32x64` is for environments
+where that arithmetic is unavailable or expensive.
 
 See [performance and cross-architecture validation](docs/benchmarks.md) for
 expanded native, JavaScript, string, and streaming tables, methodology,

@@ -2,19 +2,30 @@
 
 ## SMHasher3 result
 
-The streaming-capable candidate passed 188/188 default SMHasher3 tests with
-canonical verification value `0xEAA8E435` (`0x8705401D` for the byte-swapped
-variant).
-The run used the pinned commit documented in [SMHasher3 setup](smhasher3.md).
+The current pair-lane kernel passed the complete default SMHasher3 battery
+with canonical verification value `0xA860AB01` (`0x5F259261` for the
+byte-swapped variant) on August 9, 2026, on both an x86-64 EC2 C8a (AMD
+EPYC 9R45) and an AArch64 EC2 C8g (Arm Neoverse V2), with GCC 15.2 and
+`-O3 -march=native`. The harness's own summary reports 186/186 scored tests
+plus both verification checks. Under the identical invocation the previous
+kernel also reports 186/186, so the 188/188 figure quoted for earlier
+revisions tallied the same battery differently rather than running a larger
+test set. The runs used the pinned commit documented in
+[SMHasher3 setup](smhasher3.md).
 
-Important scope: the complete 188-test SMHasher3 result is currently a
-self-run result on one host and the adapter in
-`tests/smhasher3/haya32x64.cpp`. The shipped header has been checked
-bit-for-bit against that adapter across 100,000 randomized inputs and the
-shared vectors, but an upstream SMHasher3 row and a multi-host/compiler matrix
-for the full battery remain release work. “Passes SMHasher3” is evidence
-against known statistical and structural flaws, not evidence of cryptographic
-security.
+Two earlier bulk-kernel candidates failed specific SMHasher3 keysets before
+this one passed; the collision mechanisms and the structural fixes they forced
+(the rotated raw feedback and the cross-pair fold) are documented in
+[design](design.md). The Sparse-1280 funnel was additionally reproduced and
+then eliminated with a local 3.3-million-key regression program.
+
+Important scope: the complete 188-test SMHasher3 result is a self-run through
+the adapter in `tests/smhasher3/haya32x64.cpp`. The shipped header is checked
+against that adapter through the shared known-answer vectors and the
+SMHasher3 verification-code construction in `tests/verify.c`, but an upstream
+SMHasher3 row and a broader compiler matrix for the full battery remain
+release work. “Passes SMHasher3” is evidence against known statistical and
+structural flaws, not evidence of cryptographic security.
 
 ## Tests in this repository
 
