@@ -233,3 +233,30 @@ jobs:
             Compare-Object (Get-Content tests/kat.txt) (Get-Content kat-msvc.txt)
             exit 1
           }
+
+  fuzz:
+    name: C (libFuzzer one-shot vs stream)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the clang sanitizer runtimes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            "libclang-rt-$(clang -dumpversion | cut -d. -f1)-dev"
+      - name: Build the fuzz target
+        run: make -C tests/fuzz CC=clang
+      - name: Fuzz
+        run: make -C tests/fuzz CC=clang fuzz-run FUZZ_SECONDS=60
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tests/fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
