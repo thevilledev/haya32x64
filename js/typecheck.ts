@@ -8,8 +8,8 @@ import {
 	setWasmModule,
 	type Haya32x64Digest,
 	type Haya32x64Input,
-} from "../index.js";
-import { Haya32x64PureStream, hashPure } from "../pure.js";
+} from "./index.js";
+import { Haya32x64PureStream, hashPure } from "./pure.js";
 
 const input: Haya32x64Input = "hello";
 const bytes: Haya32x64Input = new Uint8Array(0);
@@ -21,8 +21,7 @@ const streamed: Haya32x64Digest = createHaya32x64()
 	.update(bytes)
 	.digest();
 const formatted: string = digestHex(digest);
-
-setWasmModule({} as WebAssembly.Module);
+const setModule: typeof setWasmModule = setWasmModule;
 const pure: Haya32x64Digest = haya32x64Pure(input);
 const raw: Haya32x64Digest = hashPure(new Uint8Array(4), 0, 0);
 const pureStream: Haya32x64Digest = new Haya32x64PureStream(0, 0)
@@ -33,6 +32,7 @@ void engine;
 void hex;
 void streamed;
 void formatted;
+void setModule;
 void pure;
 void raw;
 void pureStream;
