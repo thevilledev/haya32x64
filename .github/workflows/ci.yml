@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -16,6 +17,7 @@ jobs:
   zizmor:
     name: GitHub Actions security
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,6 +33,7 @@ jobs:
   c:
     name: C (${{ matrix.compiler }})
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +53,7 @@ jobs:
   sanitize:
     name: C (ASan + UBSan)
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,6 +72,7 @@ jobs:
   javascript:
     name: JavaScript (Node ${{ matrix.node }})
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -99,6 +104,7 @@ jobs:
   differential:
     name: C reference vs JavaScript engines
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,6 +130,7 @@ jobs:
   wasm-reproducible:
     name: WebAssembly artifact
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -146,6 +153,7 @@ jobs:
   big-endian:
     name: C (s390x big endian)
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,21 +165,29 @@ jobs:
           version: 0.16.0
       - name: Install qemu-user
         run: sudo apt-get update && sudo apt-get install -y qemu-user
-      - name: Cross-compile KAT and streaming tests
+      - name: Cross-compile and run the full C suite
         run: |
+          for test_name in kat verify streaming; do
+            zig cc -target s390x-linux-musl \
+              -O2 -std=c11 -Wall -Wextra -Werror \
+              "tests/${test_name}.c" \
+              -o "${{ runner.temp }}/${test_name}-s390x"
+          done
           zig cc -target s390x-linux-musl \
             -O2 -std=c11 -Wall -Wextra -Werror \
-            tests/kat.c -o "${{ runner.temp }}/kat-s390x"
-          qemu-s390x "${{ runner.temp }}/kat-s390x" > "${{ runner.temp }}/kat.txt"
-          diff -u tests/kat.txt "${{ runner.temp }}/kat.txt"
-          zig cc -target s390x-linux-musl \
-            -O2 -std=c11 -Wall -Wextra -Werror \
-            tests/streaming.c -o "${{ runner.temp }}/streaming-s390x"
+            tests/quality.c -lm -o "${{ runner.temp }}/quality-s390x"
+
+          qemu-s390x "${{ runner.temp }}/kat-s390x" \
+            > "${{ runner.temp }}/kat-s390x.txt"
+          diff -u tests/kat.txt "${{ runner.temp }}/kat-s390x.txt"
+          qemu-s390x "${{ runner.temp }}/verify-s390x"
+          qemu-s390x "${{ runner.temp }}/quality-s390x"
           qemu-s390x "${{ runner.temp }}/streaming-s390x"
 
   ilp32:
     name: C (x86 32-bit ILP32)
     runs-on: avrea-ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -210,18 +226,23 @@ jobs:
   msvc:
     name: C (MSVC x64)
     runs-on: avrea-windows-2025-2-vcpu
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Compile and generate KAT
+      - name: Compile and run the full C suite
         shell: cmd # zizmor: ignore[misfeature] -- required for VsDevCmd.bat
         run: |
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
           call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
           cl /nologo /std:c11 /O2 /W4 /WX tests\kat.c /Fe:kat.exe
           kat.exe > kat-msvc.txt
+          cl /nologo /std:c11 /O2 /W4 /WX tests\verify.c /Fe:verify.exe
+          verify.exe
+          cl /nologo /std:c11 /O2 /W4 /WX tests\quality.c /Fe:quality.exe
+          quality.exe
           cl /nologo /std:c11 /O2 /W4 /WX tests\streaming.c /Fe:streaming.exe
           streaming.exe
       - name: Compare KAT
@@ -233,3 +254,91 @@ jobs:
             Compare-Object (Get-Content tests/kat.txt) (Get-Content kat-msvc.txt)
             exit 1
           }
+
+  arm:
+    name: C (AArch64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: >-
+          make -C tests
+          CFLAGS="-O2 -std=c11 -Wall -Wextra -Werror"
+          test
+
+  cpp:
+    name: C++ (${{ matrix.compiler }}, ${{ matrix.std }})
+    runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+        std: [c++11, c++17]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compile and run as C++
+        run: |
+          for test_name in kat verify streaming; do
+            ${{ matrix.compiler }} \
+              -O2 -x c++ -std=${{ matrix.std }} -Wall -Wextra -Werror \
+              "tests/${test_name}.c" \
+              -o "${{ runner.temp }}/${test_name}-cpp"
+          done
+          "${{ runner.temp }}/kat-cpp" > "${{ runner.temp }}/kat-cpp.txt"
+          diff -u tests/kat.txt "${{ runner.temp }}/kat-cpp.txt"
+          "${{ runner.temp }}/verify-cpp"
+          "${{ runner.temp }}/streaming-cpp"
+
+  fuzz:
+    name: C (libFuzzer one-shot vs stream)
+    runs-on: avrea-ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the clang sanitizer runtimes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            "libclang-rt-$(clang -dumpversion | cut -d. -f1)-dev"
+      - name: Build the fuzz target
+        run: make -C tests/fuzz CC=clang
+      - name: Fuzz
+        run: make -C tests/fuzz CC=clang fuzz-run FUZZ_SECONDS=60
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tests/fuzz/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  smhasher3-verify:
+    name: SMHasher3 verify
+    runs-on: avrea-ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ git make
+      - name: Cache pinned SMHasher3 tree
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: tests/smhasher3/smhasher3
+          key: smhasher3-${{ runner.os }}-${{ hashFiles('tests/smhasher3/Makefile', 'tests/smhasher3/haya32x64.cpp') }}
+      - name: Verify canonical and byte-swapped codes
+        run: make -C tests/smhasher3 verify

@@ -39,8 +39,10 @@ build: install
 	$(MAKE) -C $(SRC)/$(BUILD) -j$$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 verify: build
-	cd $(SRC)/$(BUILD) && \
-		./SMHasher3 --test=VerifyAll --verbose 2>&1 | grep -i haya32x64
+	cd $(SRC)/$(BUILD) && ./SMHasher3 --test=VerifyAll --verbose > verify.out
+	grep -i haya32x64 $(SRC)/$(BUILD)/verify.out
+	grep -qi 431563d2 $(SRC)/$(BUILD)/verify.out
+	grep -qi 65bbca3d $(SRC)/$(BUILD)/verify.out
 
 run: build
 	cd $(SRC)/$(BUILD) && ./SMHasher3 --version
