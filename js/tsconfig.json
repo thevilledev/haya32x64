@@ -12,6 +12,6 @@
 	"include": [
 		"index.d.ts",
 		"pure.d.ts",
-		"test/types.ts"
+		"typecheck.ts"
 	]
 }
