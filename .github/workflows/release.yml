@@ -3,7 +3,9 @@ name: Release
 # One annotated vX.Y.Z tag publishes the JavaScript package through npm
 # trusted publishing and creates a GitHub release carrying the standalone C
 # header. The version check refuses to release when the manifest and tag
-# disagree.
+# disagree. Publish and GitHub release both wait for the reusable CI
+# workflow, so a tag cannot ship a C or portability regression that
+# ci.yml would have caught.
 
 on:
   push:
@@ -17,9 +19,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ci:
+    name: Required CI
+    uses: ./.github/workflows/ci.yml
+
   check:
     name: Version consistency
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Check out repository
@@ -38,9 +45,10 @@ jobs:
 
   npm:
     name: Publish to npm
-    needs: check
+    needs: [ci, check]
     # npm trusted publishing requires a GitHub-hosted runner.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
@@ -97,8 +105,9 @@ jobs:
 
   github-release:
     name: GitHub release
-    needs: check
+    needs: [ci, check]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
 
