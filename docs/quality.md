@@ -41,7 +41,7 @@ structural flaws, not evidence of cryptographic security.
    cover the short path, every 16/32-byte transition, the 128-byte bulk entry,
    bulk remainders, and larger inputs under three full-width seeds.
 2. `verify.c` reconstructs SMHasher3's verification-code input and pins the
-   canonical low word to `0xEAA8E435`.
+   canonical low word to `0x431563D2`.
 3. `quality.c` measures input/seed strict-avalanche smoke tests and checks exact
    collisions over sequential inputs, high-byte-only stripes, zero extension,
    top-bit combinations, and all seeds of Hamming weight zero through four.
