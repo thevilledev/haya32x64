@@ -70,10 +70,10 @@ speed results.
 ## Portability coverage
 
 CI builds with GCC and Clang, runs ASan+UBSan, rebuilds the wasm artifact, and
-replays the C differential corpus in JavaScript. The workflow also runs KAT
-and streaming equivalence on a big-endian s390x target and under MSVC, so
-alignment, byte order, state layout, and compiler ABI assumptions are tested
-rather than inferred.
+replays the C differential corpus in JavaScript. The full C suite (KAT,
+verify, quality, streaming) also runs on a big-endian s390x target, under
+MSVC, on x86 ILP32, and on a native AArch64 runner, so alignment, byte order,
+state layout, and compiler ABI assumptions are tested rather than inferred.
 
 Before a stable release, the quality claim should be repeated on multiple
 physical hosts, compiler versions, 32-bit architectures, and JavaScript
