@@ -1,7 +1,8 @@
 # Differential conformance
 
-Generate a randomized C-reference corpus and replay it through both JavaScript
-engines:
+`make test` and `make differential` from the repository root generate a
+C-reference corpus and replay it through both JavaScript engines. The
+manual equivalent is:
 
 ```sh
 cc -O2 -std=c11 -Wall -Wextra -Werror generate.c -o generate

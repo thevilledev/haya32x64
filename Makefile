@@ -1,14 +1,30 @@
-.PHONY: all test c-test js-test wasm smhasher3 benchmark-js benchmark-native clean
+CORPUS ?= $(CURDIR)/tests/differential/corpus.bin
+DIFFERENTIAL_SEED ?= 0x0123456789abcdef
+DIFFERENTIAL_CASES ?= 4096
+
+.PHONY: all test check c-test js-test differential wasm smhasher3 \
+	benchmark-js benchmark-native clean
 
 all: test
 
-test: c-test js-test
+test: c-test differential
+
+check: test
+	npm run test:package --prefix js
 
 c-test:
 	$(MAKE) -C tests test
 
 js-test:
 	npm test --prefix js
+
+tests/differential/generate: tests/differential/generate.c haya32x64.h
+	$(MAKE) -C tests generate
+
+differential: tests/differential/generate
+	tests/differential/generate \
+		"$(CORPUS)" "$(DIFFERENTIAL_SEED)" "$(DIFFERENTIAL_CASES)"
+	HAYA32X64_CORPUS="$(CORPUS)" npm test --prefix js
 
 wasm:
 	npm run build:wasm --prefix js
@@ -27,3 +43,4 @@ benchmark-native:
 
 clean:
 	$(MAKE) -C tests clean
+	rm -f "$(CORPUS)"

@@ -156,13 +156,14 @@ limitations, raw results, and reproduction commands.
 
 ```sh
 make test
-
-# C-reference differential replay through every JavaScript mode
-cc -O2 -std=c11 -Wall -Wextra -Werror \
-  tests/differential/generate.c -o tests/differential/generate
-tests/differential/generate /tmp/haya32x64.bin 0x0123456789abcdef
-HAYA32X64_CORPUS=/tmp/haya32x64.bin node --test js/test/differential.test.mjs
+make check
 ```
+
+`make test` runs the C suite, then generates a C-reference corpus and
+replays it through every JavaScript engine. `make check` also dry-runs
+`npm pack`. Override the corpus with `CORPUS`, `DIFFERENTIAL_SEED`, and
+`DIFFERENTIAL_CASES`. `make js-test` runs the JavaScript suite without a
+corpus (the differential case is skipped).
 
 Documentation: [design](docs/design.md) · [quality](docs/quality.md) ·
 [benchmarks](docs/benchmarks.md) · [SMHasher3](docs/smhasher3.md)
