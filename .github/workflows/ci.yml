@@ -89,11 +89,15 @@ jobs:
       - name: Test both engines
         run: npm test
         working-directory: js
+      - name: Typecheck public declarations
+        if: matrix.node == 22
+        run: npm run typecheck
+        working-directory: js
       - name: Check publish contents
         if: matrix.node == 22
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
-        run: npm pack --dry-run
+        run: npm run test:package && npm run lint:package
         working-directory: js
 
   differential:

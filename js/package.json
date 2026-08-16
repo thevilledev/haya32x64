@@ -53,6 +53,13 @@
 	"scripts": {
 		"build:wasm": "sh wasm/build.sh",
 		"test": "node --test",
-		"test:package": "npm pack --dry-run"
+		"test:package": "npm pack --dry-run",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint:package": "publint && attw --pack . --exclude-entrypoints ./haya32x64.wasm --profile esm-only"
+	},
+	"devDependencies": {
+		"@arethetypeswrong/cli": "0.18.5",
+		"publint": "0.3.16",
+		"typescript": "5.9.3"
 	}
 }
