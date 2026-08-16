@@ -169,13 +169,18 @@ static size_t test_seed_sparse(void)
 	return collision_count();
 }
 
+static void store64le(uint8_t *out, uint64_t value)
+{
+	for (unsigned int i = 0; i < 8; i++)
+		out[i] = (uint8_t)(value >> (8 * i));
+}
+
 static size_t test_sequential(size_t length, size_t count)
 {
 	uint8_t key[64] = {0};
 	collision_reset(count);
 	for (size_t i = 0; i < count; i++) {
-		uint64_t value = i;
-		memcpy(key, &value, sizeof(value));
+		store64le(key, i);
 		collision_add(haya32x64(key, length, 0));
 	}
 	return collision_count();

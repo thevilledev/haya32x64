@@ -8,6 +8,9 @@ time and is not part of release artifacts.
 make -C tests/smhasher3 run
 ```
 
+CI runs `make -C tests/smhasher3 verify` on every pull request and caches the
+pinned clone. The complete battery remains a weekly (and manual) job.
+
 The dedicated adapter is stored at `tests/smhasher3/haya32x64.cpp`. To print
 both computed verification values:
 

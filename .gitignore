@@ -4,6 +4,8 @@ tests/quality
 tests/streaming
 tests/kat.actual.txt
 tests/differential/generate
+tests/fuzz/one_shot_stream
+tests/fuzz/artifacts/
 tests/smhasher3/smhasher3/
 *.dSYM/
 *.bin
