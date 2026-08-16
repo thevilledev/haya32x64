@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "Node16",
+		"moduleResolution": "Node16",
+		"strict": true,
+		"noEmit": true,
+		"exactOptionalPropertyTypes": true,
+		"skipLibCheck": false,
+		"types": []
+	},
+	"include": [
+		"index.d.ts",
+		"pure.d.ts",
+		"test/types.ts"
+	]
+}
