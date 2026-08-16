@@ -126,7 +126,7 @@ static void randomized(const uint8_t *key)
 
 int main(void)
 {
-	uint8_t *key = malloc(MAX_LENGTH);
+	uint8_t *key = (uint8_t *)malloc(MAX_LENGTH);
 	if (key == NULL)
 		return 2;
 	for (size_t i = 0; i < MAX_LENGTH; i++)

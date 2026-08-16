@@ -233,3 +233,30 @@ jobs:
             Compare-Object (Get-Content tests/kat.txt) (Get-Content kat-msvc.txt)
             exit 1
           }
+
+  cpp:
+    name: C++ (${{ matrix.compiler }}, ${{ matrix.std }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+        std: [c++11, c++17]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compile and run as C++
+        run: |
+          for test_name in kat verify streaming; do
+            ${{ matrix.compiler }} \
+              -O2 -x c++ -std=${{ matrix.std }} -Wall -Wextra -Werror \
+              "tests/${test_name}.c" \
+              -o "${{ runner.temp }}/${test_name}-cpp"
+          done
+          "${{ runner.temp }}/kat-cpp" > "${{ runner.temp }}/kat-cpp.txt"
+          diff -u tests/kat.txt "${{ runner.temp }}/kat-cpp.txt"
+          "${{ runner.temp }}/verify-cpp"
+          "${{ runner.temp }}/streaming-cpp"
